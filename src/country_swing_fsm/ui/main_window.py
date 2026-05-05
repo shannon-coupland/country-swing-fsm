@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QGraphicsPathItem,
     QGraphicsScene,
     QGraphicsSimpleTextItem,
+    QGraphicsTextItem,
     QGraphicsView,
     QMainWindow,
 )
@@ -44,22 +45,42 @@ class MainWindow(QMainWindow):
 class DiagramView(QGraphicsView):
     def __init__(self, scene: QGraphicsScene) -> None:
         super().__init__(scene)
+        self._has_manual_zoom = False
         self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         self.setBackgroundBrush(BACKGROUND_COLOR)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.BoundingRectViewportUpdate)
+        self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        self._fit_scene()
+        if not self._has_manual_zoom:
+            self._fit_scene()
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        self._fit_scene()
+        if not self._has_manual_zoom:
+            self._fit_scene()
+
+    def wheelEvent(self, event) -> None:
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self._has_manual_zoom = True
+            zoom_in_factor = 1.15
+            zoom_factor = zoom_in_factor if event.angleDelta().y() > 0 else 1.0 / zoom_in_factor
+
+            old_anchor = self.transformationAnchor()
+            self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+            self.scale(zoom_factor, zoom_factor)
+            self.setTransformationAnchor(old_anchor)
+            event.accept()
+            return
+
+        super().wheelEvent(event)
 
     def _fit_scene(self) -> None:
         rect = self.sceneRect()
         if rect.isValid() and not rect.isEmpty():
+            self.resetTransform()
             self.fitInView(rect, Qt.AspectRatioMode.KeepAspectRatio)
 
 
@@ -135,8 +156,10 @@ def _add_position_node(
     scene.addItem(circle)
 
     label = position.label or "(unlabeled)"
-    text_item = QGraphicsSimpleTextItem(label)
-    text_item.setBrush(QBrush(Qt.GlobalColor.white))
+    text_item = QGraphicsTextItem(label)
+    text_item.setDefaultTextColor(Qt.GlobalColor.white)
+    text_item.setTextWidth(CIRCLE_DIAMETER - 20.0)
+    text_item.document().setDocumentMargin(0.0)
     bounds = text_item.boundingRect()
     text_item.setPos(center.x() - (bounds.width() / 2.0), center.y() - (bounds.height() / 2.0))
     scene.addItem(text_item)
