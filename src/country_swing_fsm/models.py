@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from country_swing_fsm.enums import Direction, Role
+from country_swing_fsm.enums import Direction, PositionType, Role
 
 
 @dataclass(slots=True, frozen=True)
@@ -16,6 +16,7 @@ class SubPosition:
 class Position:
     label: str | None = None
     crossed: bool = False
+    position_type: PositionType = PositionType.NORMAL
     outgoing_moves: list[OutgoingMove] = field(default_factory=list)
     sub_positions: list[SubPosition] = field(default_factory=list)
 

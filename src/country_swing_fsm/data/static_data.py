@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from country_swing_fsm.enums import Direction, Role
+from country_swing_fsm.enums import Direction, PositionType, Role
 from country_swing_fsm.models import Move, SubMove, OutgoingMove, Position, SubPosition
 
 
@@ -48,11 +48,13 @@ def create_position(
     lead_hands_joined: list[Direction],
     follow_hands_joined: list[Direction],
     crossed: bool,
+    position_type: PositionType,
     moves: list[MoveDefinition] | None = None,
 ) -> Position:
     position = Position(
         label=label,
         crossed=crossed,
+        position_type=position_type,
         sub_positions=[
             SubPosition(
                 role=Role.LEAD,
@@ -124,6 +126,7 @@ FIRST_HALF = create_position(
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.RIGHT],
     crossed=False,
+    position_type=PositionType.NORMAL,
     moves=[
         create_move(
             label="Behind the Back Pass",
@@ -177,6 +180,7 @@ FIRST_HALF_OPPOSITE = create_position(
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.LEFT],
     crossed=False,
+    position_type=PositionType.NORMAL,
     moves=[
         create_move(
             label="Offer Left Hand Outside Turn(s)",
@@ -200,6 +204,7 @@ FIRST_HALF_BOTH = create_position(
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
     crossed=False,
+    position_type=PositionType.NORMAL,
     moves=[
         create_move(
             label="Behind the Back Pass (Infinity)",
@@ -241,6 +246,7 @@ FIRST_HALF_BOTH_CUDDLE = create_position(
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
     crossed=False,
+    position_type=PositionType.TWISTED,
     moves=[
         create_move(
             label="Trust Fall",
@@ -270,6 +276,7 @@ FIRST_HALF_CROSSED = create_position(
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT],
     crossed=True,
+    position_type=PositionType.NORMAL,
     moves=[
         create_move(
             label="Behind the Back Pass",
@@ -311,6 +318,7 @@ FIRST_HALF_CROSSED_OPPOSITE = create_position(
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.LEFT],
     crossed=True,
+    position_type=PositionType.NORMAL,
     moves=[
         create_move(
             label="Hairbrush",
@@ -340,6 +348,7 @@ FIRST_HALF_CROSSED_BOTH = create_position( # TODO ensure an S Dip can happen fro
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
     crossed=True,
+    position_type=PositionType.NORMAL,
     moves=[
         create_move(
             label="Hairbrush",
@@ -372,6 +381,7 @@ SECOND_HALF = create_position(
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.RIGHT],
     crossed=False,
+    position_type=PositionType.NORMAL,
     moves=[
         create_move(
             label="Inside Turn(s)",
@@ -383,7 +393,7 @@ SECOND_HALF = create_position(
             label="Inside Turn(s) Into Dip",
             is_lead_turn=False,
             is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_DIP, # TODO seeing error "FIRST_HALF_DIP" is not defined"
+            dest_position=lambda: FIRST_HALF_DIP,
         ),
         create_move(
             label="Right Shoulder Duck",
@@ -419,6 +429,7 @@ SECOND_HALF_OPPOSITE = create_position(
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.LEFT],
     crossed=False,
+    position_type=PositionType.NORMAL,
     moves=[
         create_move(
             label="Offer Left Hand Inside Turn(s)",
@@ -454,6 +465,7 @@ SECOND_HALF_BOTH = create_position(
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
     crossed=False,
+    position_type=PositionType.NORMAL,
     moves=[
         create_move(
             label="Inside Turn(s) (Infinity)",
@@ -495,6 +507,7 @@ SECOND_HALF_BOTH_TWISTED = create_position(
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
     crossed=False,
+    position_type=PositionType.TWISTED,
     moves=[
         create_move(
             label="Hairbrush",
@@ -518,6 +531,7 @@ SECOND_HALF_BOTH_HAMMERLOCK = create_position(
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
     crossed=False,
+    position_type=PositionType.TWISTED,
     moves=[
         create_move(
             label="Hair Flip",
@@ -535,6 +549,7 @@ SECOND_HALF_CROSSED = create_position(
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT],
     crossed=True,
+    position_type=PositionType.NORMAL,
     moves=[
         create_move(
             label="Inside Turn(s) - Put Hand in Left",
@@ -582,6 +597,7 @@ SECOND_HALF_CROSSED_OPPOSITE = create_position(
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.LEFT],
     crossed=True,
+    position_type=PositionType.NORMAL,
     moves=[
         create_move(
             label="Hairbrush",
@@ -623,6 +639,7 @@ SECOND_HALF_CROSSED_BOTH = create_position(
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
     crossed=True,
+    position_type=PositionType.NORMAL,
     moves=[
         create_move(
             label="Hairbrush",
@@ -641,19 +658,44 @@ SECOND_HALF_CROSSED_BOTH = create_position(
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
+        ),
+        create_move(
+            label="S Dip",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_S_DIP
         )
     ],
 )
 
 
-# Trick/One-Off Positions
+# Impact / One-Off Positions
 FIRST_HALF_DIP = create_position(
-    label="Entering Dip",
+    label="Entering Left Dip",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[],
     follow_hands_joined=[],
     crossed=False,
+    position_type=PositionType.IMPACT,
+    moves=[
+        create_move(
+            label="Dip and Reset",
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF,
+        )
+    ],
+)
+
+FIRST_HALF_S_DIP = create_position(
+    label="Entering Left S Dip",
+    lead_start_step_foot=Direction.LEFT,
+    follow_start_step_foot=Direction.RIGHT,
+    lead_hands_joined=[Direction.RIGHT],
+    follow_hands_joined=[Direction.RIGHT],
+    crossed=False,
+    position_type=PositionType.IMPACT,
     moves=[
         create_move(
             label="Dip and Reset",
@@ -671,6 +713,7 @@ FIRST_HALF_TRUST_FALL = create_position(
     lead_hands_joined=[],
     follow_hands_joined=[],
     crossed=False,
+    position_type=PositionType.IMPACT,
     moves=[
         create_move(
             label="Trust Fall and Reset",
@@ -688,6 +731,7 @@ FIRST_HALF_CATCH = create_position(
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.RIGHT],
     crossed=False,
+    position_type=PositionType.TWISTED,
     moves=[
         create_move(
             label="Push Into Reset",
@@ -711,6 +755,7 @@ SECOND_HALF_SHOULDER_LEAN = create_position(
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.LEFT],
     crossed=True,
+    position_type=PositionType.IMPACT,
     moves=[
         create_move(
             label="Arm Slide",
@@ -729,6 +774,7 @@ SECOND_HALF_CATCH = create_position(
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.RIGHT],
     crossed=False,
+    position_type=PositionType.TWISTED,
     moves=[
         create_move(
             label="Fishtail",

@@ -12,18 +12,21 @@ from PySide6.QtWidgets import (
     QMainWindow,
 )
 
-from country_swing_fsm.enums import Direction
+from country_swing_fsm.enums import Direction, PositionType
 from country_swing_fsm.models import Move, Position
 
 
 LEFT_COLOR = QColor("#2563eb")
 RIGHT_COLOR = QColor("#f97316")
+IMPACT_COLOR = QColor("#9333ea")
 BACKGROUND_COLOR = QColor("#f8fafc")
 TEXT_COLOR = QColor("#0f172a")
 
 CIRCLE_DIAMETER = 120.0
 LEFT_COLUMN_X = 120.0
 RIGHT_COLUMN_X = 680.0
+IMPACT_START_X = 220.0
+IMPACT_SPACING = 180.0
 TOP_MARGIN = 80.0
 ROW_SPACING = 220.0
 
@@ -89,10 +92,23 @@ def build_scene(positions: list[Position], moves: list[Move]) -> QGraphicsScene:
     scene.setBackgroundBrush(BACKGROUND_COLOR)
 
     left_positions = [
-        position for position in positions if position.lead_start_step_foot == Direction.LEFT
+        position
+        for position in positions
+        if (
+            position.position_type != PositionType.IMPACT
+            and position.lead_start_step_foot == Direction.LEFT
+        )
     ]
     right_positions = [
-        position for position in positions if position.lead_start_step_foot == Direction.RIGHT
+        position
+        for position in positions
+        if (
+            position.position_type != PositionType.IMPACT
+            and position.lead_start_step_foot == Direction.RIGHT
+        )
+    ]
+    impact_positions = [
+        position for position in positions if position.position_type == PositionType.IMPACT
     ]
 
     centers_by_position_id: dict[int, QPointF] = {}
@@ -109,6 +125,16 @@ def build_scene(positions: list[Position], moves: list[Move]) -> QGraphicsScene:
         center = QPointF(RIGHT_COLUMN_X, TOP_MARGIN + 80.0 + (index * ROW_SPACING))
         centers_by_position_id[id(position)] = center
         _add_position_node(scene, position, center, RIGHT_COLOR)
+
+    impact_row_width = (max(len(impact_positions) - 1, 0)) * IMPACT_SPACING
+    impact_row_start_x = ((LEFT_COLUMN_X + RIGHT_COLUMN_X) / 2.0) - (impact_row_width / 2.0)
+    impact_row_start_x = max(impact_row_start_x, IMPACT_START_X)
+    impact_row_y = TOP_MARGIN + 80.0 + (max(len(left_positions), len(right_positions)) * ROW_SPACING)
+
+    for index, position in enumerate(impact_positions):
+        center = QPointF(impact_row_start_x + (index * IMPACT_SPACING), impact_row_y)
+        centers_by_position_id[id(position)] = center
+        _add_position_node(scene, position, center, IMPACT_COLOR)
 
     parallel_move_groups: dict[tuple[int, int], list[Move]] = {}
     for move in moves:

@@ -9,3 +9,9 @@ class Role(str, Enum):
 class Direction(str, Enum):
     LEFT = "left"
     RIGHT = "right"
+
+
+class PositionType(str, Enum):
+    NORMAL = "normal"
+    TWISTED = "twisted"
+    IMPACT = "impact"
