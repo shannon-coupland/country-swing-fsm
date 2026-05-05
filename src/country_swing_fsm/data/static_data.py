@@ -47,10 +47,23 @@ def create_position(
     follow_start_step_foot: Direction,
     lead_hands_joined: list[Direction],
     follow_hands_joined: list[Direction],
-    crossed: bool,
     position_type: PositionType,
-    moves: list[MoveDefinition] | None = None,
+    moves: list[MoveDefinition],
+    crossed: bool | None = None,
 ) -> Position:
+    hand_count = len(lead_hands_joined)
+    if hand_count != len(follow_hands_joined):
+        raise ValueError("Lead and follow must have the same number of joined hands.")
+
+    if hand_count == 1:
+        if crossed is not None:
+            raise ValueError(
+                "crossed must not be supplied for single-hand positions; it is derived."
+            )
+        crossed = lead_hands_joined[0] == follow_hands_joined[0]
+    elif crossed is None:
+        raise ValueError("crossed must be supplied for positions with other than one hand.")
+
     position = Position(
         label=label,
         crossed=crossed,
@@ -125,7 +138,6 @@ FIRST_HALF = create_position(
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.RIGHT],
-    crossed=False,
     position_type=PositionType.NORMAL,
     moves=[
         create_move(
@@ -179,7 +191,6 @@ FIRST_HALF_OPPOSITE = create_position(
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.LEFT],
-    crossed=False,
     position_type=PositionType.NORMAL,
     moves=[
         create_move(
@@ -275,7 +286,6 @@ FIRST_HALF_CROSSED = create_position(
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT],
-    crossed=True,
     position_type=PositionType.NORMAL,
     moves=[
         create_move(
@@ -317,7 +327,6 @@ FIRST_HALF_CROSSED_OPPOSITE = create_position(
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.LEFT],
-    crossed=True,
     position_type=PositionType.NORMAL,
     moves=[
         create_move(
@@ -380,7 +389,6 @@ SECOND_HALF = create_position(
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.RIGHT],
-    crossed=False,
     position_type=PositionType.NORMAL,
     moves=[
         create_move(
@@ -428,7 +436,6 @@ SECOND_HALF_OPPOSITE = create_position(
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.LEFT],
-    crossed=False,
     position_type=PositionType.NORMAL,
     moves=[
         create_move(
@@ -548,7 +555,6 @@ SECOND_HALF_CROSSED = create_position(
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT],
-    crossed=True,
     position_type=PositionType.NORMAL,
     moves=[
         create_move(
@@ -596,7 +602,6 @@ SECOND_HALF_CROSSED_OPPOSITE = create_position(
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.LEFT],
-    crossed=True,
     position_type=PositionType.NORMAL,
     moves=[
         create_move(
@@ -694,7 +699,6 @@ FIRST_HALF_S_DIP = create_position(
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT],
-    crossed=False,
     position_type=PositionType.IMPACT,
     moves=[
         create_move(
@@ -730,7 +734,6 @@ FIRST_HALF_CATCH = create_position(
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.RIGHT],
-    crossed=False,
     position_type=PositionType.TWISTED,
     moves=[
         create_move(
@@ -754,7 +757,6 @@ SECOND_HALF_SHOULDER_LEAN = create_position(
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.LEFT],
-    crossed=True,
     position_type=PositionType.IMPACT,
     moves=[
         create_move(
@@ -773,7 +775,6 @@ SECOND_HALF_CATCH = create_position(
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.RIGHT],
-    crossed=False,
     position_type=PositionType.TWISTED,
     moves=[
         create_move(
