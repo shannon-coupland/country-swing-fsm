@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import warnings
-
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen, QPolygonF
+from PySide6.QtGui import QAction, QBrush, QColor, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QGraphicsEllipseItem,
     QGraphicsPathItem,
@@ -11,11 +9,18 @@ from PySide6.QtWidgets import (
     QGraphicsSimpleTextItem,
     QGraphicsTextItem,
     QGraphicsView,
+    QHBoxLayout,
     QMainWindow,
+    QMenu,
+    QPushButton,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from country_swing_fsm.enums import Direction, PositionType, Role
 from country_swing_fsm.models import Move, Position
+from country_swing_fsm.ui.filtering import FilterOption, FilterOptions, build_filter_options, filter_graph
 
 
 LEFT_COLOR = QColor("#2563eb")
@@ -24,7 +29,7 @@ LEFT_TWISTED_COLOR = QColor("#60a5fa")
 RIGHT_TWISTED_COLOR = QColor("#fdba74")
 IMPACT_COLOR = QColor("#9333ea")
 BACKGROUND_COLOR = QColor("#f8fafc")
-TEXT_COLOR = QColor("#0f172a")
+TOP_BAR_COLOR = QColor("#e2e8f0")
 
 CIRCLE_DIAMETER = 120.0
 LEFT_COLUMN_X = 120.0
@@ -35,19 +40,195 @@ TOP_MARGIN = 80.0
 ROW_SPACING = 220.0
 GROUPED_ROW_SPACING = max(ROW_SPACING / 3.0, CIRCLE_DIAMETER + 24.0)
 
+GROUP_ORDER = {
+    (False, 1): 0,
+    (False, 2): 1,
+    (True, 1): 2,
+    (True, 2): 3,
+}
+POSITION_TYPE_ORDER = {
+    PositionType.NORMAL: 0,
+    PositionType.TWISTED: 1,
+    PositionType.IMPACT: 2,
+}
+DIRECTION_ORDER = {
+    Direction.LEFT: 0,
+    Direction.RIGHT: 1,
+}
+FILTER_BUTTON_TITLES = {
+    "positions": "Positions",
+    "lead_moves": "Lead Moves",
+    "follow_moves": "Follow Moves",
+}
+
 
 class MainWindow(QMainWindow):
     def __init__(self, positions: list[Position], moves: list[Move]) -> None:
         super().__init__()
-        self.positions = positions
-        self.moves = moves
+        self.all_positions = positions
+        self.all_moves = moves
+        self.filter_options = build_filter_options(positions, moves)
+        self.selected_filter_keys: dict[str, set[str]] = {
+            "positions": set(),
+            "lead_moves": set(),
+            "follow_moves": set(),
+        }
+        self.filter_buttons: dict[str, QToolButton] = {}
+        self.filter_actions: dict[str, list[QAction]] = {}
+        self.filter_options_by_key: dict[str, FilterOption] = {
+            option.key: option
+            for option in (
+                *self.filter_options.position_options,
+                *self.filter_options.lead_move_options,
+                *self.filter_options.follow_move_options,
+            )
+        }
+        self._suppress_refresh = False
 
         self.setWindowTitle("Country Swing FSM")
         self.resize(1000, 700)
 
-        self.scene = build_scene(positions, moves)
-        self.view = DiagramView(self.scene)
-        self.setCentralWidget(self.view)
+        self.view = DiagramView(QGraphicsScene())
+
+        central_widget = QWidget()
+        central_layout = QVBoxLayout(central_widget)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(0)
+        central_layout.addWidget(self._build_filter_bar())
+        central_layout.addWidget(self.view)
+        self.setCentralWidget(central_widget)
+
+        self._refresh_scene()
+
+    def _build_filter_bar(self) -> QWidget:
+        bar = QWidget()
+        bar.setAutoFillBackground(True)
+        palette = bar.palette()
+        palette.setColor(bar.backgroundRole(), TOP_BAR_COLOR)
+        bar.setPalette(palette)
+
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(8)
+
+        self._add_filter_button(
+            layout,
+            "positions",
+            self.filter_options.position_options,
+        )
+        self._add_filter_button(
+            layout,
+            "lead_moves",
+            self.filter_options.lead_move_options,
+        )
+        self._add_filter_button(
+            layout,
+            "follow_moves",
+            self.filter_options.follow_move_options,
+        )
+        clear_button = QPushButton("Clear All Filters")
+        clear_button.clicked.connect(self._clear_all_filters)
+        layout.addWidget(clear_button)
+        layout.addStretch(1)
+        return bar
+
+    def _add_filter_button(
+        self,
+        layout: QHBoxLayout,
+        filter_key: str,
+        options: tuple[FilterOption, ...],
+    ) -> None:
+        button = QToolButton()
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        button.setAutoRaise(True)
+        button.setStyleSheet("QToolButton { padding: 4px 10px; }")
+        self.filter_actions[filter_key] = []
+
+        menu = PersistentFilterMenu(button)
+        previous_section_label: str | None = None
+        for option in options:
+            if previous_section_label != option.section_label:
+                if previous_section_label is not None:
+                    menu.addSeparator()
+                header_action = QAction(option.section_label, menu)
+                header_action.setEnabled(False)
+                menu.addAction(header_action)
+                previous_section_label = option.section_label
+
+            action = QAction(option.label, menu)
+            action.setCheckable(True)
+            action.setData(option.key)
+            action.toggled.connect(
+                lambda checked, filter_key=filter_key, option_key=option.key: self._on_filter_toggled(
+                    filter_key,
+                    option_key,
+                    checked,
+                )
+            )
+            menu.addAction(action)
+            self.filter_actions[filter_key].append(action)
+
+        button.setMenu(menu)
+        self.filter_buttons[filter_key] = button
+        self._update_filter_button_label(filter_key)
+        layout.addWidget(button)
+
+    def _on_filter_toggled(self, filter_key: str, option_key: str, checked: bool) -> None:
+        selected_keys = self.selected_filter_keys[filter_key]
+        if checked:
+            selected_keys.add(option_key)
+            opposite_key = self.filter_options_by_key[option_key].opposite_key
+            if opposite_key is not None and opposite_key in selected_keys:
+                selected_keys.discard(opposite_key)
+                self._suppress_refresh = True
+                try:
+                    self._set_action_checked(filter_key, opposite_key, False)
+                finally:
+                    self._suppress_refresh = False
+        else:
+            selected_keys.discard(option_key)
+        self._update_filter_button_label(filter_key)
+        if not self._suppress_refresh:
+            self._refresh_scene()
+
+    def _clear_all_filters(self) -> None:
+        self._suppress_refresh = True
+        try:
+            for filter_key, selected_keys in self.selected_filter_keys.items():
+                selected_keys.clear()
+                for action in self.filter_actions[filter_key]:
+                    if action.isChecked():
+                        action.setChecked(False)
+                self._update_filter_button_label(filter_key)
+        finally:
+            self._suppress_refresh = False
+
+        self._refresh_scene()
+
+    def _set_action_checked(self, filter_key: str, option_key: str, checked: bool) -> None:
+        for action in self.filter_actions[filter_key]:
+            if action.data() == option_key and action.isChecked() != checked:
+                action.setChecked(checked)
+                return
+
+    def _update_filter_button_label(self, filter_key: str) -> None:
+        base_title = FILTER_BUTTON_TITLES[filter_key]
+        selected_count = len(self.selected_filter_keys[filter_key])
+        label = base_title if selected_count == 0 else f"{base_title} ({selected_count})"
+        self.filter_buttons[filter_key].setText(label)
+
+    def _refresh_scene(self) -> None:
+        filtered_graph = filter_graph(
+            all_positions=self.all_positions,
+            all_moves=self.all_moves,
+            position_options=self.filter_options.position_options,
+            selected_position_keys=self.selected_filter_keys["positions"],
+            lead_move_options=self.filter_options.lead_move_options,
+            selected_lead_move_keys=self.selected_filter_keys["lead_moves"],
+            follow_move_options=self.filter_options.follow_move_options,
+            selected_follow_move_keys=self.selected_filter_keys["follow_moves"],
+        )
+        self.view.load_scene(build_scene(filtered_graph.positions, filtered_graph.moves))
 
 
 class DiagramView(QGraphicsView):
@@ -85,6 +266,11 @@ class DiagramView(QGraphicsView):
 
         super().wheelEvent(event)
 
+    def load_scene(self, scene: QGraphicsScene) -> None:
+        self._has_manual_zoom = False
+        self.setScene(scene)
+        self._fit_scene()
+
     def _fit_scene(self) -> None:
         rect = self.sceneRect()
         if rect.isValid() and not rect.isEmpty():
@@ -92,29 +278,50 @@ class DiagramView(QGraphicsView):
             self.fitInView(rect, Qt.AspectRatioMode.KeepAspectRatio)
 
 
+class PersistentFilterMenu(QMenu):
+    def mouseReleaseEvent(self, event) -> None:
+        action = self.activeAction()
+        if action is not None and action.isCheckable():
+            action.trigger()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+
 def build_scene(positions: list[Position], moves: list[Move]) -> QGraphicsScene:
     scene = QGraphicsScene()
     scene.setBackgroundBrush(BACKGROUND_COLOR)
 
-    left_positions = [
-        position
-        for position in positions
-        if (
-            position.position_type != PositionType.IMPACT
-            and position.lead_start_step_foot == Direction.LEFT
-        )
+    included_positions_by_id = {id(position): position for position in positions}
+    filtered_moves = [
+        move
+        for move in moves
+        if id(move.source) in included_positions_by_id and id(move.destination) in included_positions_by_id
     ]
-    right_positions = [
-        position
-        for position in positions
-        if (
-            position.position_type != PositionType.IMPACT
-            and position.lead_start_step_foot == Direction.RIGHT
-        )
-    ]
-    impact_positions = [
-        position for position in positions if position.position_type == PositionType.IMPACT
-    ]
+
+    left_positions = _sorted_column_positions(
+        [
+            position
+            for position in positions
+            if (
+                position.position_type != PositionType.IMPACT
+                and position.lead_start_step_foot == Direction.LEFT
+            )
+        ]
+    )
+    right_positions = _sorted_column_positions(
+        [
+            position
+            for position in positions
+            if (
+                position.position_type != PositionType.IMPACT
+                and position.lead_start_step_foot == Direction.RIGHT
+            )
+        ]
+    )
+    impact_positions = _sorted_impact_positions(
+        [position for position in positions if position.position_type == PositionType.IMPACT]
+    )
     impact_row_width = (max(len(impact_positions) - 1, 0)) * IMPACT_SPACING
     right_column_x = max(
         RIGHT_COLUMN_X,
@@ -126,9 +333,6 @@ def build_scene(positions: list[Position], moves: list[Move]) -> QGraphicsScene:
     _add_column_header(scene, "Lead starts LEFT", LEFT_COLUMN_X, LEFT_COLOR)
     _add_column_header(scene, "Lead starts RIGHT", right_column_x, RIGHT_COLOR)
 
-    _warn_on_split_groups(left_positions, "Lead starts LEFT")
-    _warn_on_split_groups(right_positions, "Lead starts RIGHT")
-
     left_y_positions, right_y_positions = _aligned_column_y_positions(
         left_positions,
         right_positions,
@@ -137,12 +341,22 @@ def build_scene(positions: list[Position], moves: list[Move]) -> QGraphicsScene:
     for index, position in enumerate(left_positions):
         center = QPointF(LEFT_COLUMN_X, left_y_positions[index])
         centers_by_position_id[id(position)] = center
-        _add_position_node(scene, position, center, _position_color(position, LEFT_COLOR, LEFT_TWISTED_COLOR))
+        _add_position_node(
+            scene,
+            position,
+            center,
+            _position_color(position, LEFT_COLOR, LEFT_TWISTED_COLOR),
+        )
 
     for index, position in enumerate(right_positions):
         center = QPointF(right_column_x, right_y_positions[index])
         centers_by_position_id[id(position)] = center
-        _add_position_node(scene, position, center, _position_color(position, RIGHT_COLOR, RIGHT_TWISTED_COLOR))
+        _add_position_node(
+            scene,
+            position,
+            center,
+            _position_color(position, RIGHT_COLOR, RIGHT_TWISTED_COLOR),
+        )
 
     impact_row_start_x = ((LEFT_COLUMN_X + right_column_x) / 2.0) - (impact_row_width / 2.0)
     impact_row_y = max(
@@ -156,7 +370,7 @@ def build_scene(positions: list[Position], moves: list[Move]) -> QGraphicsScene:
         _add_position_node(scene, position, center, IMPACT_COLOR)
 
     parallel_move_groups: dict[tuple[int, int], list[Move]] = {}
-    for move in moves:
+    for move in filtered_moves:
         key = (id(move.source), id(move.destination))
         parallel_move_groups.setdefault(key, []).append(move)
 
@@ -174,23 +388,55 @@ def build_scene(positions: list[Position], moves: list[Move]) -> QGraphicsScene:
     return scene
 
 
-def _column_y_positions(positions: list[Position]) -> list[float]:
-    if not positions:
-        return []
+def _sorted_column_positions(positions: list[Position]) -> list[Position]:
+    return sorted(positions, key=_column_position_sort_key)
 
-    y_positions = [TOP_MARGIN + 80.0]
-    for index in range(1, len(positions)):
-        spacing = GROUPED_ROW_SPACING if _grouping_key(positions[index - 1]) == _grouping_key(positions[index]) else ROW_SPACING
-        y_positions.append(y_positions[-1] + spacing)
-    return y_positions
+
+def _sorted_impact_positions(positions: list[Position]) -> list[Position]:
+    return sorted(
+        positions,
+        key=lambda position: (
+            POSITION_TYPE_ORDER[position.position_type],
+            DIRECTION_ORDER[position.lead_start_step_foot],
+            _hands_joined_sort_key(position),
+            position.label or "",
+        ),
+    )
+
+
+def _column_position_sort_key(position: Position) -> tuple[int, int, tuple[int, ...], str]:
+    return (
+        GROUP_ORDER.get(
+            (position.crossed, len(position.sub_position_for_role(Role.LEAD).hands_joined)),
+            len(GROUP_ORDER),
+        ),
+        POSITION_TYPE_ORDER[position.position_type],
+        _single_hand_priority(position),
+        _hands_joined_sort_key(position),
+        position.label or "",
+    )
+
+
+def _hands_joined_sort_key(position: Position) -> tuple[int, ...]:
+    return tuple(
+        DIRECTION_ORDER[direction]
+        for direction in position.sub_position_for_role(Role.LEAD).hands_joined
+    )
+
+
+def _single_hand_priority(position: Position) -> int:
+    follow_hands_joined = position.sub_position_for_role(Role.FOLLOW).hands_joined
+    if len(follow_hands_joined) != 1:
+        return 0
+    return 0 if follow_hands_joined[0] == Direction.RIGHT else 1
 
 
 def _aligned_column_y_positions(
     left_positions: list[Position],
     right_positions: list[Position],
 ) -> tuple[list[float], list[float]]:
-    left_groups = _contiguous_groups(left_positions)
-    right_groups = _contiguous_groups(right_positions)
+    left_groups = _display_groups(left_positions)
+    right_groups = _display_groups(right_positions)
 
     left_y_positions: list[float] = []
     right_y_positions: list[float] = []
@@ -213,17 +459,16 @@ def _aligned_column_y_positions(
     return left_y_positions, right_y_positions
 
 
-def _contiguous_groups(positions: list[Position]) -> list[list[Position]]:
-    if not positions:
-        return []
+def _display_groups(positions: list[Position]) -> list[list[Position]]:
+    grouped_positions: dict[int, list[Position]] = {}
+    for position in positions:
+        group_index = GROUP_ORDER.get(
+            (position.crossed, len(position.sub_position_for_role(Role.LEAD).hands_joined)),
+            len(GROUP_ORDER),
+        )
+        grouped_positions.setdefault(group_index, []).append(position)
 
-    groups: list[list[Position]] = [[positions[0]]]
-    for position in positions[1:]:
-        if _grouping_key(position) == _grouping_key(groups[-1][-1]):
-            groups[-1].append(position)
-        else:
-            groups.append([position])
-    return groups
+    return [grouped_positions[index] for index in sorted(grouped_positions)]
 
 
 def _group_y_positions(group: list[Position], start_y: float) -> list[float]:
@@ -232,37 +477,6 @@ def _group_y_positions(group: list[Position], start_y: float) -> list[float]:
 
 def _group_height(group: list[Position]) -> float:
     return max(len(group) - 1, 0) * GROUPED_ROW_SPACING
-
-
-def _grouping_key(position: Position) -> tuple[Direction, int, bool] | None:
-    if position.position_type not in {PositionType.NORMAL, PositionType.TWISTED}:
-        return None
-    return (
-        position.lead_start_step_foot,
-        len(position.sub_position_for_role(Role.LEAD).hands_joined),
-        position.crossed,
-    )
-
-
-def _warn_on_split_groups(positions: list[Position], column_label: str) -> None:
-    grouped_indices: dict[tuple[Direction, int, bool], list[int]] = {}
-    for index, position in enumerate(positions):
-        key = _grouping_key(position)
-        if key is None:
-            continue
-        grouped_indices.setdefault(key, []).append(index)
-
-    for key, indices in grouped_indices.items():
-        if len(indices) < 2:
-            continue
-        if indices[-1] - indices[0] + 1 == len(indices):
-            continue
-
-        labels = [positions[index].label or "(unlabeled)" for index in indices]
-        warnings.warn(
-            f"{column_label} has non-adjacent grouped states for {key}: {', '.join(labels)}",
-            stacklevel=2,
-        )
 
 
 def _add_column_header(scene: QGraphicsScene, label: str, center_x: float, color: QColor) -> None:

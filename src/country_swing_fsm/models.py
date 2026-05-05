@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from country_swing_fsm.enums import Direction, PositionType, Role
+from country_swing_fsm.enums import Difficulty, Direction, PositionType, Role
 
 
 @dataclass(slots=True, frozen=True)
@@ -16,6 +16,7 @@ class SubPosition:
 class Position:
     label: str | None = None
     crossed: bool = False
+    difficulty: Difficulty = Difficulty.BEGINNER
     position_type: PositionType = PositionType.NORMAL
     outgoing_moves: list[OutgoingMove] = field(default_factory=list)
     sub_positions: list[SubPosition] = field(default_factory=list)
@@ -67,6 +68,7 @@ class Move:
     label: str | None
     source: Position
     destination: Position
+    difficulty: Difficulty = Difficulty.BEGINNER
     sub_moves: list[SubMove] = field(default_factory=list)
 
     def __post_init__(self) -> None:

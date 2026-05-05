@@ -15,3 +15,9 @@ class PositionType(str, Enum):
     NORMAL = "normal"
     TWISTED = "twisted"
     IMPACT = "impact"
+
+
+class Difficulty(str, Enum):
+    BEGINNER = "beginner"
+    INTERMEDIATE = "intermediate"
+    ADVANCED = "advanced"

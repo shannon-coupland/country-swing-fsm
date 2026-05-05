@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from country_swing_fsm.enums import Direction, PositionType, Role
+from country_swing_fsm.enums import Difficulty, Direction, PositionType, Role
 from country_swing_fsm.models import Move, SubMove, OutgoingMove, Position, SubPosition
 
 
@@ -15,6 +15,7 @@ class MoveDefinition:
     label: str | None
     is_lead_turn: bool
     is_follow_turn: bool
+    difficulty: Difficulty
     destination_reference: DestinationReference
 
 
@@ -32,11 +33,13 @@ def create_move(
     is_lead_turn: bool,
     is_follow_turn: bool,
     dest_position: DestinationReference,
+    difficulty: Difficulty = Difficulty.BEGINNER,
 ) -> MoveDefinition:
     return MoveDefinition(
         label=label,
         is_lead_turn=is_lead_turn,
         is_follow_turn=is_follow_turn,
+        difficulty=difficulty,
         destination_reference=dest_position,
     )
 
@@ -50,6 +53,7 @@ def create_position(
     position_type: PositionType,
     moves: list[MoveDefinition],
     crossed: bool | None = None,
+    difficulty: Difficulty = Difficulty.BEGINNER,
 ) -> Position:
     hand_count = len(lead_hands_joined)
     if hand_count != len(follow_hands_joined):
@@ -67,6 +71,7 @@ def create_position(
     position = Position(
         label=label,
         crossed=crossed,
+        difficulty=difficulty,
         position_type=position_type,
         sub_positions=[
             SubPosition(
@@ -112,6 +117,7 @@ def _build_all_moves() -> list[Move]:
                 label=move_definition.label,
                 source=position_definition.position,
                 destination=destination,
+                difficulty=move_definition.difficulty,
                 sub_moves=[
                     SubMove(role=Role.LEAD, is_turn=move_definition.is_lead_turn),
                     SubMove(role=Role.FOLLOW, is_turn=move_definition.is_follow_turn),
@@ -156,12 +162,14 @@ FIRST_HALF = create_position(
             label="Pancake Outside Turn(s)",
             is_lead_turn=False,
             is_follow_turn=True,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: SECOND_HALF,
         ),
         create_move(
             label="Push Off Outside Turn",
             is_lead_turn=False,
             is_follow_turn=True,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: SECOND_HALF,
         ),
         create_move(
@@ -174,6 +182,7 @@ FIRST_HALF = create_position(
             label="Rainbow Outside Turn(s)",
             is_lead_turn=False,
             is_follow_turn=True,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: SECOND_HALF_CROSSED,
         ),
         create_move(
@@ -192,6 +201,7 @@ FIRST_HALF_OPPOSITE = create_position(
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.LEFT],
     position_type=PositionType.NORMAL,
+    difficulty=Difficulty.INTERMEDIATE,
     moves=[
         create_move(
             label="Offer Left Hand Outside Turn(s)",
@@ -201,8 +211,8 @@ FIRST_HALF_OPPOSITE = create_position(
         ),
         create_move(
             label="Inside Turn(s)",
-            is_lead_turn=True,
-            is_follow_turn=False,
+            is_lead_turn=False,
+            is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_OPPOSITE,
         )
     ],
@@ -215,6 +225,7 @@ FIRST_HALF_CATCH = create_position(
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.RIGHT],
     position_type=PositionType.TWISTED,
+    difficulty=Difficulty.INTERMEDIATE,
     moves=[
         create_move(
             label="Push Into Reset",
@@ -226,6 +237,7 @@ FIRST_HALF_CATCH = create_position(
             label="Fishtail",
             is_lead_turn=False,
             is_follow_turn=True,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: SECOND_HALF_CATCH,
         )
     ],
@@ -256,6 +268,7 @@ FIRST_HALF_BOTH = create_position(
             label="Outside Turn (Hammerlock)",
             is_lead_turn=False,
             is_follow_turn=True,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK,
         ),
         create_move(
@@ -268,6 +281,7 @@ FIRST_HALF_BOTH = create_position(
             label="Opposite Hand Arm Slide",
             is_lead_turn=False,
             is_follow_turn=False,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE,
         )
     ],
@@ -286,6 +300,7 @@ FIRST_HALF_BOTH_CUDDLE = create_position(
             label="Trust Fall",
             is_lead_turn=False,
             is_follow_turn=False,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: FIRST_HALF_TRUST_FALL,
         ),
         create_move(
@@ -321,18 +336,21 @@ FIRST_HALF_CROSSED = create_position(
             label="Behind the Back Pass - Keep Hands Switched",
             is_lead_turn=True,
             is_follow_turn=False,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: SECOND_HALF_CROSSED,
         ),
         create_move(
             label="Lasso Into Outside Turn",
             is_lead_turn=False,
             is_follow_turn=True,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE,
         ),
         create_move(
-            label="Lasso Into Shoulder Lean", # TODO ensure that FIRST_HALF_CROSSED_OPPOSITE can also go into SECOND_HALF_SHOULDER_LEAN
+            label="Lasso Into Shoulder Lean",
             is_lead_turn=False,
             is_follow_turn=True,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: SECOND_HALF_SHOULDER_LEAN,
         ),
         create_move(
@@ -351,6 +369,7 @@ FIRST_HALF_CROSSED_OPPOSITE = create_position(
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.LEFT],
     position_type=PositionType.NORMAL,
+    difficulty=Difficulty.INTERMEDIATE,
     moves=[
         create_move(
             label="Hairbrush",
@@ -369,11 +388,18 @@ FIRST_HALF_CROSSED_OPPOSITE = create_position(
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE,
+        ),
+        create_move(
+            label="Shoulder Lean",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            difficulty=Difficulty.INTERMEDIATE,
+            dest_position=lambda: SECOND_HALF_SHOULDER_LEAN
         )
     ],
 )
 
-FIRST_HALF_CROSSED_BOTH = create_position( # TODO ensure an S Dip can happen from SECOND_HALF_CROSSED_BOTH
+FIRST_HALF_CROSSED_BOTH = create_position(
     label="First Half Crossed 2 Hands",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
@@ -430,12 +456,14 @@ SECOND_HALF = create_position(
             label="Right Shoulder Duck",
             is_lead_turn=False,
             is_follow_turn=True,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: FIRST_HALF,
         ),
         create_move(
             label="Stop at Left Shoulder",
             is_lead_turn=False,
             is_follow_turn=True,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: FIRST_HALF_CATCH,
         ),
         create_move(
@@ -496,11 +524,13 @@ SECOND_HALF_CATCH = create_position(
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.RIGHT],
     position_type=PositionType.TWISTED,
+    difficulty=Difficulty.INTERMEDIATE,
     moves=[
         create_move(
             label="Fishtail",
             is_lead_turn=False,
             is_follow_turn=True,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: FIRST_HALF_CATCH
         ),
         create_move(
@@ -543,6 +573,7 @@ SECOND_HALF_BOTH = create_position(
             label="Opposite Hand Arm Slide",
             is_lead_turn=False,
             is_follow_turn=False,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE,
         )
     ],
@@ -580,11 +611,13 @@ SECOND_HALF_BOTH_HAMMERLOCK = create_position(
     follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
     crossed=False,
     position_type=PositionType.TWISTED,
+    difficulty=Difficulty.INTERMEDIATE,
     moves=[
         create_move(
             label="Hair Flip",
             is_lead_turn=False,
             is_follow_turn=False,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: FIRST_HALF_OPPOSITE,
         )
     ],
@@ -644,24 +677,13 @@ SECOND_HALF_CROSSED_OPPOSITE = create_position(
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.LEFT],
     position_type=PositionType.NORMAL,
+    difficulty=Difficulty.INTERMEDIATE,
     moves=[
         create_move(
             label="Hairbrush",
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF,
-        ),
-        create_move(
-            label="Offer Left Hand Inside Turn - Keep Right Hand",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
-        ),
-        create_move(
-            label="Inside Turn - Join Hands",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
         ),
         create_move(
             label="Offer Right Hand Outside Turn(s)",
@@ -709,6 +731,7 @@ SECOND_HALF_CROSSED_BOTH = create_position(
             label="S Dip",
             is_lead_turn=False,
             is_follow_turn=True,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: FIRST_HALF_S_DIP
         )
     ],
@@ -741,6 +764,7 @@ FIRST_HALF_S_DIP = create_position(
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT],
     position_type=PositionType.IMPACT,
+    difficulty=Difficulty.INTERMEDIATE,
     moves=[
         create_move(
             label="Dip and Reset",
@@ -759,11 +783,13 @@ FIRST_HALF_TRUST_FALL = create_position(
     follow_hands_joined=[],
     crossed=False,
     position_type=PositionType.IMPACT,
+    difficulty=Difficulty.INTERMEDIATE,
     moves=[
         create_move(
             label="Trust Fall and Reset",
             is_lead_turn=False,
             is_follow_turn=False,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: FIRST_HALF,
         )
     ],
@@ -776,11 +802,13 @@ SECOND_HALF_SHOULDER_LEAN = create_position(
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.LEFT],
     position_type=PositionType.IMPACT,
+    difficulty=Difficulty.INTERMEDIATE,
     moves=[
         create_move(
             label="Arm Slide",
             is_lead_turn=False,
             is_follow_turn=False,
+            difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: FIRST_HALF_OPPOSITE,
         ),
         # TODO consider a move that uses connected lead left/follow left
