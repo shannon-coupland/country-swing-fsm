@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import warnings
+
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import (
@@ -12,12 +14,14 @@ from PySide6.QtWidgets import (
     QMainWindow,
 )
 
-from country_swing_fsm.enums import Direction, PositionType
+from country_swing_fsm.enums import Direction, PositionType, Role
 from country_swing_fsm.models import Move, Position
 
 
 LEFT_COLOR = QColor("#2563eb")
 RIGHT_COLOR = QColor("#f97316")
+LEFT_TWISTED_COLOR = QColor("#60a5fa")
+RIGHT_TWISTED_COLOR = QColor("#fdba74")
 IMPACT_COLOR = QColor("#9333ea")
 BACKGROUND_COLOR = QColor("#f8fafc")
 TEXT_COLOR = QColor("#0f172a")
@@ -29,6 +33,7 @@ IMPACT_START_X = 220.0
 IMPACT_SPACING = 180.0
 TOP_MARGIN = 80.0
 ROW_SPACING = 220.0
+GROUPED_ROW_SPACING = max(ROW_SPACING / 3.0, CIRCLE_DIAMETER + 24.0)
 
 
 class MainWindow(QMainWindow):
@@ -110,26 +115,40 @@ def build_scene(positions: list[Position], moves: list[Move]) -> QGraphicsScene:
     impact_positions = [
         position for position in positions if position.position_type == PositionType.IMPACT
     ]
+    impact_row_width = (max(len(impact_positions) - 1, 0)) * IMPACT_SPACING
+    right_column_x = max(
+        RIGHT_COLUMN_X,
+        (2.0 * IMPACT_START_X) + impact_row_width - LEFT_COLUMN_X,
+    )
 
     centers_by_position_id: dict[int, QPointF] = {}
 
     _add_column_header(scene, "Lead starts LEFT", LEFT_COLUMN_X, LEFT_COLOR)
-    _add_column_header(scene, "Lead starts RIGHT", RIGHT_COLUMN_X, RIGHT_COLOR)
+    _add_column_header(scene, "Lead starts RIGHT", right_column_x, RIGHT_COLOR)
+
+    _warn_on_split_groups(left_positions, "Lead starts LEFT")
+    _warn_on_split_groups(right_positions, "Lead starts RIGHT")
+
+    left_y_positions, right_y_positions = _aligned_column_y_positions(
+        left_positions,
+        right_positions,
+    )
 
     for index, position in enumerate(left_positions):
-        center = QPointF(LEFT_COLUMN_X, TOP_MARGIN + 80.0 + (index * ROW_SPACING))
+        center = QPointF(LEFT_COLUMN_X, left_y_positions[index])
         centers_by_position_id[id(position)] = center
-        _add_position_node(scene, position, center, LEFT_COLOR)
+        _add_position_node(scene, position, center, _position_color(position, LEFT_COLOR, LEFT_TWISTED_COLOR))
 
     for index, position in enumerate(right_positions):
-        center = QPointF(RIGHT_COLUMN_X, TOP_MARGIN + 80.0 + (index * ROW_SPACING))
+        center = QPointF(right_column_x, right_y_positions[index])
         centers_by_position_id[id(position)] = center
-        _add_position_node(scene, position, center, RIGHT_COLOR)
+        _add_position_node(scene, position, center, _position_color(position, RIGHT_COLOR, RIGHT_TWISTED_COLOR))
 
-    impact_row_width = (max(len(impact_positions) - 1, 0)) * IMPACT_SPACING
-    impact_row_start_x = ((LEFT_COLUMN_X + RIGHT_COLUMN_X) / 2.0) - (impact_row_width / 2.0)
-    impact_row_start_x = max(impact_row_start_x, IMPACT_START_X)
-    impact_row_y = TOP_MARGIN + 80.0 + (max(len(left_positions), len(right_positions)) * ROW_SPACING)
+    impact_row_start_x = ((LEFT_COLUMN_X + right_column_x) / 2.0) - (impact_row_width / 2.0)
+    impact_row_y = max(
+        left_y_positions[-1] if left_y_positions else 0.0,
+        right_y_positions[-1] if right_y_positions else 0.0,
+    ) + ROW_SPACING
 
     for index, position in enumerate(impact_positions):
         center = QPointF(impact_row_start_x + (index * IMPACT_SPACING), impact_row_y)
@@ -141,19 +160,109 @@ def build_scene(positions: list[Position], moves: list[Move]) -> QGraphicsScene:
         key = (id(move.source), id(move.destination))
         parallel_move_groups.setdefault(key, []).append(move)
 
-    for move in moves:
-        sibling_moves = parallel_move_groups[(id(move.source), id(move.destination))]
+    for sibling_moves in parallel_move_groups.values():
+        move = sibling_moves[0]
         _add_move_edge(
             scene=scene,
             move=move,
             source_center=centers_by_position_id[id(move.source)],
             destination_center=centers_by_position_id[id(move.destination)],
-            sibling_index=sibling_moves.index(move),
-            sibling_count=len(sibling_moves),
+            label="\n".join(sibling_move.label or "(unlabeled)" for sibling_move in sibling_moves),
         )
 
     scene.setSceneRect(scene.itemsBoundingRect().adjusted(-80.0, -60.0, 80.0, 60.0))
     return scene
+
+
+def _column_y_positions(positions: list[Position]) -> list[float]:
+    if not positions:
+        return []
+
+    y_positions = [TOP_MARGIN + 80.0]
+    for index in range(1, len(positions)):
+        spacing = GROUPED_ROW_SPACING if _grouping_key(positions[index - 1]) == _grouping_key(positions[index]) else ROW_SPACING
+        y_positions.append(y_positions[-1] + spacing)
+    return y_positions
+
+
+def _aligned_column_y_positions(
+    left_positions: list[Position],
+    right_positions: list[Position],
+) -> tuple[list[float], list[float]]:
+    left_groups = _contiguous_groups(left_positions)
+    right_groups = _contiguous_groups(right_positions)
+
+    left_y_positions: list[float] = []
+    right_y_positions: list[float] = []
+    group_start_y = TOP_MARGIN + 80.0
+    group_count = max(len(left_groups), len(right_groups))
+
+    for group_index in range(group_count):
+        left_group = left_groups[group_index] if group_index < len(left_groups) else []
+        right_group = right_groups[group_index] if group_index < len(right_groups) else []
+
+        left_y_positions.extend(_group_y_positions(left_group, group_start_y))
+        right_y_positions.extend(_group_y_positions(right_group, group_start_y))
+
+        tallest_group_height = max(
+            _group_height(left_group),
+            _group_height(right_group),
+        )
+        group_start_y += tallest_group_height + ROW_SPACING
+
+    return left_y_positions, right_y_positions
+
+
+def _contiguous_groups(positions: list[Position]) -> list[list[Position]]:
+    if not positions:
+        return []
+
+    groups: list[list[Position]] = [[positions[0]]]
+    for position in positions[1:]:
+        if _grouping_key(position) == _grouping_key(groups[-1][-1]):
+            groups[-1].append(position)
+        else:
+            groups.append([position])
+    return groups
+
+
+def _group_y_positions(group: list[Position], start_y: float) -> list[float]:
+    return [start_y + (index * GROUPED_ROW_SPACING) for index in range(len(group))]
+
+
+def _group_height(group: list[Position]) -> float:
+    return max(len(group) - 1, 0) * GROUPED_ROW_SPACING
+
+
+def _grouping_key(position: Position) -> tuple[Direction, int, bool] | None:
+    if position.position_type not in {PositionType.NORMAL, PositionType.TWISTED}:
+        return None
+    return (
+        position.lead_start_step_foot,
+        len(position.sub_position_for_role(Role.LEAD).hands_joined),
+        position.crossed,
+    )
+
+
+def _warn_on_split_groups(positions: list[Position], column_label: str) -> None:
+    grouped_indices: dict[tuple[Direction, int, bool], list[int]] = {}
+    for index, position in enumerate(positions):
+        key = _grouping_key(position)
+        if key is None:
+            continue
+        grouped_indices.setdefault(key, []).append(index)
+
+    for key, indices in grouped_indices.items():
+        if len(indices) < 2:
+            continue
+        if indices[-1] - indices[0] + 1 == len(indices):
+            continue
+
+        labels = [positions[index].label or "(unlabeled)" for index in indices]
+        warnings.warn(
+            f"{column_label} has non-adjacent grouped states for {key}: {', '.join(labels)}",
+            stacklevel=2,
+        )
 
 
 def _add_column_header(scene: QGraphicsScene, label: str, center_x: float, color: QColor) -> None:
@@ -191,15 +300,23 @@ def _add_position_node(
     scene.addItem(text_item)
 
 
+def _position_color(position: Position, base_color: QColor, twisted_color: QColor) -> QColor:
+    if position.position_type == PositionType.TWISTED:
+        return twisted_color
+    return base_color
+
+
 def _add_move_edge(
     scene: QGraphicsScene,
     move: Move,
     source_center: QPointF,
     destination_center: QPointF,
-    sibling_index: int,
-    sibling_count: int,
+    label: str,
 ) -> None:
-    color = LEFT_COLOR if move.source.lead_start_step_foot == Direction.LEFT else RIGHT_COLOR
+    if move.source.position_type == PositionType.IMPACT:
+        color = IMPACT_COLOR
+    else:
+        color = LEFT_COLOR if move.source.lead_start_step_foot == Direction.LEFT else RIGHT_COLOR
     pen = QPen(color, 3)
 
     start = _source_circle_edge_point(move.source, source_center)
@@ -208,8 +325,6 @@ def _add_move_edge(
         start=start,
         end=end,
         curvature_offset=_curvature_offset(
-            sibling_index=sibling_index,
-            sibling_count=sibling_count,
             source_center=source_center,
             destination_center=destination_center,
         ),
@@ -220,7 +335,7 @@ def _add_move_edge(
     scene.addItem(path_item)
 
     _add_arrow_head(scene, path, color)
-    _add_edge_label(scene, move.label or "(unlabeled)", path, color, source_center)
+    _add_edge_label(scene, label, path, color, source_center)
 
 
 def _source_circle_edge_point(position: Position, center: QPointF) -> QPointF:
@@ -262,18 +377,11 @@ def _build_edge_path(start: QPointF, end: QPointF, curvature_offset: float) -> Q
 
 
 def _curvature_offset(
-    sibling_index: int,
-    sibling_count: int,
     source_center: QPointF,
     destination_center: QPointF,
 ) -> float:
     direction_bias = -28.0 if source_center.x() <= destination_center.x() else 28.0
-    if sibling_count <= 1:
-        return direction_bias
-
-    spacing = 42.0
-    center = (sibling_count - 1) / 2.0
-    return direction_bias + ((sibling_index - center) * spacing)
+    return direction_bias
 
 
 def _add_arrow_head(scene: QGraphicsScene, path: QPainterPath, color: QColor) -> None:

@@ -208,6 +208,29 @@ FIRST_HALF_OPPOSITE = create_position(
     ],
 )
 
+FIRST_HALF_CATCH = create_position(
+    label="First Half Catch",
+    lead_start_step_foot=Direction.LEFT,
+    follow_start_step_foot=Direction.RIGHT,
+    lead_hands_joined=[Direction.LEFT],
+    follow_hands_joined=[Direction.RIGHT],
+    position_type=PositionType.TWISTED,
+    moves=[
+        create_move(
+            label="Push Into Reset",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF,
+        ),
+        create_move(
+            label="Fishtail",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_CATCH,
+        )
+    ],
+)
+
 FIRST_HALF_BOTH = create_position(
     label="First Half Uncrossed 2 Hands",
     lead_start_step_foot=Direction.LEFT,
@@ -465,6 +488,30 @@ SECOND_HALF_OPPOSITE = create_position(
     ],
 )
 
+
+SECOND_HALF_CATCH = create_position(
+    label="Second Half Catch",
+    lead_start_step_foot=Direction.RIGHT,
+    follow_start_step_foot=Direction.LEFT,
+    lead_hands_joined=[Direction.LEFT],
+    follow_hands_joined=[Direction.RIGHT],
+    position_type=PositionType.TWISTED,
+    moves=[
+        create_move(
+            label="Fishtail",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_CATCH
+        ),
+        create_move(
+            label="Push Into Reset",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF
+        )
+    ]
+)
+
 SECOND_HALF_BOTH = create_position(
     label="Second Half Uncrossed 2 Hands",
     lead_start_step_foot=Direction.RIGHT,
@@ -476,12 +523,6 @@ SECOND_HALF_BOTH = create_position(
     moves=[
         create_move(
             label="Inside Turn(s) (Infinity)",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_BOTH,
-        ),
-        create_move(
-            label="Spinneroo (Step to Right)",
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_BOTH,
@@ -705,7 +746,7 @@ FIRST_HALF_S_DIP = create_position(
             label="Dip and Reset",
             is_lead_turn=False,
             is_follow_turn=False,
-            dest_position=lambda: FIRST_HALF,
+            dest_position=lambda: SECOND_HALF_CROSSED,
         )
     ],
 )
@@ -728,29 +769,6 @@ FIRST_HALF_TRUST_FALL = create_position(
     ],
 )
 
-FIRST_HALF_CATCH = create_position(
-    label="First Half Catch",
-    lead_start_step_foot=Direction.LEFT,
-    follow_start_step_foot=Direction.RIGHT,
-    lead_hands_joined=[Direction.LEFT],
-    follow_hands_joined=[Direction.RIGHT],
-    position_type=PositionType.TWISTED,
-    moves=[
-        create_move(
-            label="Push Into Reset",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: SECOND_HALF,
-        ),
-        create_move(
-            label="Fishtail",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: SECOND_HALF_CATCH,
-        )
-    ],
-)
-
 SECOND_HALF_SHOULDER_LEAN = create_position(
     label="Second Half Shoulder Lean",
     lead_start_step_foot=Direction.RIGHT,
@@ -767,23 +785,6 @@ SECOND_HALF_SHOULDER_LEAN = create_position(
         ),
         # TODO consider a move that uses connected lead left/follow left
     ],
-)
-
-SECOND_HALF_CATCH = create_position(
-    label="Second Half Catch",
-    lead_start_step_foot=Direction.RIGHT,
-    follow_start_step_foot=Direction.LEFT,
-    lead_hands_joined=[Direction.LEFT],
-    follow_hands_joined=[Direction.RIGHT],
-    position_type=PositionType.TWISTED,
-    moves=[
-        create_move(
-            label="Fishtail",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_CATCH
-        )
-    ]
 )
 
 
