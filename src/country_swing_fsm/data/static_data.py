@@ -657,6 +657,12 @@ SECOND_HALF_CROSSED = create_position(
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE,
+        ),
+        create_move(
+            label="Keep Hand - Offer Left Hand Inside Turn(s)",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
         )
     ],
 )
@@ -746,7 +752,7 @@ FIRST_HALF_DIP = create_position(
             label="Dip and Reset",
             is_lead_turn=False,
             is_follow_turn=False,
-            dest_position=lambda: FIRST_HALF,
+            dest_position=lambda: SECOND_HALF,
         )
     ],
 )

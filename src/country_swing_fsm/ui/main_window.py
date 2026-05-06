@@ -31,11 +31,14 @@ from country_swing_fsm.ui.filtering import FilterOption, FilterOptions, build_fi
 
 LEFT_COLOR = QColor("#2563eb")
 RIGHT_COLOR = QColor("#f97316")
-LEFT_TWISTED_COLOR = QColor("#60a5fa")
-RIGHT_TWISTED_COLOR = QColor("#fdba74")
 IMPACT_COLOR = QColor("#9333ea")
 BACKGROUND_COLOR = QColor("#f8fafc")
 TOP_BAR_COLOR = QColor("#e2e8f0")
+TEXT_COLOR = QColor("#0f172a")
+LEAD_DIAGRAM_COLOR = QColor("#ec4899")
+FOLLOW_DIAGRAM_COLOR = QColor("#22c55e")
+DIAGRAM_LINE_COLOR = QColor("#334155")
+DIAGRAM_LINE_OUTLINE_COLOR = QColor("#ffffff")
 
 CIRCLE_DIAMETER = 120.0
 LEFT_COLUMN_X = 120.0
@@ -48,6 +51,13 @@ GROUPED_ROW_SPACING = max(ROW_SPACING / 3.0, CIRCLE_DIAMETER + 24.0)
 DIMMED_OPACITY = 0.18
 SELECTION_KIND_DATA_KEY = 0
 SELECTION_ID_DATA_KEY = 1
+OUTER_CIRCLE_PEN_WIDTH = 2.0
+INNER_CIRCLE_DIAMETER = 28.0
+INNER_CIRCLE_RADIUS = INNER_CIRCLE_DIAMETER / 2.0
+INNER_CIRCLE_VERTICAL_OFFSET = 22.0
+INNER_CIRCLE_TEXT_SIZE = 12.0
+CONNECTION_PEN_WIDTH = 3.0
+CONNECTION_OUTLINE_PEN_WIDTH = 5.0
 
 GROUP_ORDER = {
     (False, 1): 0,
@@ -534,7 +544,7 @@ def build_scene(
             scene,
             position,
             center,
-            _position_color(position, LEFT_COLOR, LEFT_TWISTED_COLOR),
+            LEFT_COLOR,
             display_role,
             position_key,
         )
@@ -547,7 +557,7 @@ def build_scene(
             scene,
             position,
             center,
-            _position_color(position, RIGHT_COLOR, RIGHT_TWISTED_COLOR),
+            RIGHT_COLOR,
             display_role,
             position_key,
         )
@@ -703,7 +713,7 @@ def _add_position_node(
     scene: QGraphicsScene,
     position: Position,
     center: QPointF,
-    color: QColor,
+    outline_color: QColor,
     display_role: Role,
     position_key: str,
 ) -> list[QGraphicsItem]:
@@ -714,21 +724,188 @@ def _add_position_node(
         CIRCLE_DIAMETER,
     )
     circle = QGraphicsEllipseItem(circle_rect)
-    circle.setBrush(QBrush(color))
-    circle.setPen(QPen(color.darker(120), 2))
+    circle.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+    circle.setPen(QPen(outline_color, OUTER_CIRCLE_PEN_WIDTH))
     _set_item_focus_data(circle, "position", position_key)
     scene.addItem(circle)
 
+    items: list[QGraphicsItem] = [circle]
+    if position.position_type == PositionType.NORMAL:
+        items.extend(_add_normal_position_diagram(scene, position, center, display_role, position_key))
+        return items
+
     label = _display_position_label(position, display_role)
     text_item = QGraphicsTextItem(label)
-    text_item.setDefaultTextColor(Qt.GlobalColor.white)
+    text_item.setDefaultTextColor(TEXT_COLOR)
     text_item.setTextWidth(CIRCLE_DIAMETER - 20.0)
     text_item.document().setDocumentMargin(0.0)
     bounds = text_item.boundingRect()
     text_item.setPos(center.x() - (bounds.width() / 2.0), center.y() - (bounds.height() / 2.0))
     _set_item_focus_data(text_item, "position", position_key)
     scene.addItem(text_item)
+    items.append(text_item)
+    return items
+
+
+def _add_normal_position_diagram(
+    scene: QGraphicsScene,
+    position: Position,
+    center: QPointF,
+    display_role: Role,
+    position_key: str,
+) -> list[QGraphicsItem]:
+    bottom_role = display_role
+    top_role = Role.FOLLOW if display_role == Role.LEAD else Role.LEAD
+    top_center = QPointF(center.x(), center.y() - INNER_CIRCLE_VERTICAL_OFFSET)
+    bottom_center = QPointF(center.x(), center.y() + INNER_CIRCLE_VERTICAL_OFFSET)
+    centers_by_role = {
+        top_role: top_center,
+        bottom_role: bottom_center,
+    }
+
+    items: list[QGraphicsItem] = []
+    items.extend(
+        _add_hand_connection_items(
+            scene,
+            position,
+            centers_by_role,
+            display_role,
+            position_key,
+        )
+    )
+    items.extend(
+        _add_role_circle_items(
+            scene,
+            position.sub_position_for_role(top_role),
+            top_center,
+            _diagram_role_color(top_role),
+            position_key,
+        )
+    )
+    items.extend(
+        _add_role_circle_items(
+            scene,
+            position.sub_position_for_role(bottom_role),
+            bottom_center,
+            _diagram_role_color(bottom_role),
+            position_key,
+        )
+    )
+    return items
+
+
+def _add_hand_connection_items(
+    scene: QGraphicsScene,
+    position: Position,
+    centers_by_role: dict[Role, QPointF],
+    display_role: Role,
+    position_key: str,
+) -> list[QGraphicsItem]:
+    lead_hands = position.sub_position_for_role(Role.LEAD).hands_joined
+    follow_sub_position = position.sub_position_for_role(Role.FOLLOW)
+    follow_hands = follow_sub_position.hands_joined
+    hand_count = len(lead_hands)
+    if hand_count == 0:
+        return []
+
+    outline_pen = QPen(DIAGRAM_LINE_OUTLINE_COLOR, CONNECTION_OUTLINE_PEN_WIDTH)
+    pen = QPen(DIAGRAM_LINE_COLOR, CONNECTION_PEN_WIDTH)
+    connection_specs: list[tuple[Direction, QPointF, QPointF]] = []
+    items: list[QGraphicsItem] = []
+    for index, lead_hand in enumerate(lead_hands):
+        follow_index = hand_count - 1 - index if hand_count == 2 and position.crossed else index
+        follow_hand = follow_hands[follow_index]
+        lead_point = _hand_anchor_point(
+            Role.LEAD,
+            lead_hand,
+            centers_by_role[Role.LEAD],
+            display_role,
+        )
+        follow_point = _hand_anchor_point(
+            Role.FOLLOW,
+            follow_hand,
+            centers_by_role[Role.FOLLOW],
+            display_role,
+        )
+        connection_specs.append((follow_hand, lead_point, follow_point))
+
+    if hand_count == 2:
+        start_foot_hand = follow_sub_position.start_step_foot
+        connection_specs.sort(
+            key=lambda connection_spec: connection_spec[0] == start_foot_hand
+        )
+
+    for _, lead_point, follow_point in connection_specs:
+        outline_item = scene.addLine(
+            lead_point.x(),
+            lead_point.y(),
+            follow_point.x(),
+            follow_point.y(),
+            outline_pen,
+        )
+        _set_item_focus_data(outline_item, "position", position_key)
+        items.append(outline_item)
+
+        line_item = scene.addLine(
+            lead_point.x(),
+            lead_point.y(),
+            follow_point.x(),
+            follow_point.y(),
+            pen,
+        )
+        _set_item_focus_data(line_item, "position", position_key)
+        items.append(line_item)
+    return items
+
+
+def _add_role_circle_items(
+    scene: QGraphicsScene,
+    sub_position,
+    center: QPointF,
+    fill_color: QColor,
+    position_key: str,
+) -> list[QGraphicsItem]:
+    rect = QRectF(
+        center.x() - INNER_CIRCLE_RADIUS,
+        center.y() - INNER_CIRCLE_RADIUS,
+        INNER_CIRCLE_DIAMETER,
+        INNER_CIRCLE_DIAMETER,
+    )
+    circle = QGraphicsEllipseItem(rect)
+    circle.setBrush(QBrush(fill_color))
+    circle.setPen(QPen(fill_color.darker(115), 1.5))
+    _set_item_focus_data(circle, "position", position_key)
+    scene.addItem(circle)
+
+    text_item = QGraphicsSimpleTextItem(sub_position.start_step_foot.value[:1].upper())
+    text_item.setBrush(QBrush(TEXT_COLOR))
+    font = text_item.font()
+    font.setPointSizeF(INNER_CIRCLE_TEXT_SIZE)
+    font.setBold(True)
+    text_item.setFont(font)
+    bounds = text_item.boundingRect()
+    text_item.setPos(center.x() - (bounds.width() / 2.0), center.y() - (bounds.height() / 2.0))
+    _set_item_focus_data(text_item, "position", position_key)
+    scene.addItem(text_item)
     return [circle, text_item]
+
+
+def _hand_anchor_point(
+    role: Role,
+    hand: Direction,
+    circle_center: QPointF,
+    display_role: Role,
+) -> QPointF:
+    side_multiplier = 1.0 if hand == Direction.RIGHT else -1.0
+    if role == Role.FOLLOW:
+        side_multiplier *= -1.0
+    if display_role == Role.FOLLOW:
+        side_multiplier *= -1.0
+    return QPointF(circle_center.x() + (INNER_CIRCLE_RADIUS * side_multiplier), circle_center.y())
+
+
+def _diagram_role_color(role: Role) -> QColor:
+    return LEAD_DIAGRAM_COLOR if role == Role.LEAD else FOLLOW_DIAGRAM_COLOR
 
 
 def _display_position_label(position: Position, display_role: Role) -> str:
@@ -762,12 +939,6 @@ def _position_option_key(position: Position) -> str:
 
 def _move_option_key(move: Move) -> str:
     return f"move:{id(move.source)}:{id(move.destination)}"
-
-
-def _position_color(position: Position, base_color: QColor, twisted_color: QColor) -> QColor:
-    if position.position_type == PositionType.TWISTED:
-        return twisted_color
-    return base_color
 
 
 def _add_move_edge(
