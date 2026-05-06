@@ -179,10 +179,16 @@ FIRST_HALF = create_position(
             dest_position=lambda: SECOND_HALF,
         ),
         create_move(
-            label="Offer Right Hand Outside Turn(s)",
+            label="Offer Hand + Drop",
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: SECOND_HALF_OPPOSITE,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_OPPOSITE,
+        ),
+        create_move(
+            label="Offer Hand + Hold",
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_BOTH,
         ),
         create_move(
             label="Rainbow Outside Turn(s)",
@@ -209,10 +215,16 @@ FIRST_HALF_OPPOSITE = create_position(
     difficulty=Difficulty.INTERMEDIATE,
     moves=[
         create_move(
-            label="Offer Left Hand Outside Turn(s)",
+            label="Offer Hand + Drop",
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: SECOND_HALF,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF,
+        ),
+        create_move(
+            label="Offer Hand + Hold",
+            is_lead_turn = False,
+            is_follow_turn = False,
+            dest_position=lambda: FIRST_HALF_BOTH
         ),
         create_move(
             label="Inside Turn(s)",
@@ -357,10 +369,10 @@ FIRST_HALF_CROSSED = create_position(
             dest_position=lambda: SECOND_HALF_SHOULDER_LEAN,
         ),
         create_move(
-            label="Offer Left Hand Outside Turn",
+            label="Offer Hand + Drop",
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: SECOND_HALF_BOTH,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE,
         )
     ],
 )
@@ -380,10 +392,16 @@ FIRST_HALF_CROSSED_OPPOSITE = create_position(
             dest_position=lambda: SECOND_HALF,
         ),
         create_move(
-            label="Offer Right Hand Outside Turn(s)",
+            label="Offer Hand + Drop",
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: SECOND_HALF_CROSSED,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED,
+        ),
+        create_move(
+            label="Offer Hand + Hold",
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
         ),
         create_move(
             label="Inside Turn(s)",
@@ -467,10 +485,16 @@ SECOND_HALF = create_position(
             dest_position=lambda: FIRST_HALF_CATCH,
         ),
         create_move(
-            label="Offer Right Hand Outside Turn(s)",
+            label="Offer Hand + Drop",
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_OPPOSITE,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_OPPOSITE,
+        ),
+        create_move(
+            label="Offer Hand + Hold",
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_BOTH
         ),
         create_move(
             label="Inside Turn(s) - Join Hands",
@@ -489,10 +513,16 @@ SECOND_HALF_OPPOSITE = create_position(
     position_type=PositionType.NORMAL,
     moves=[
         create_move(
-            label="Offer Left Hand Inside Turn(s)",
+            label="Offer Hand + Drop",
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF,
+        ),
+        create_move(
+            label="Offer Hand + Hold",
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_BOTH,
         ),
         create_move(
             label="J Hook Reset",
@@ -653,16 +683,16 @@ SECOND_HALF_CROSSED = create_position(
             dest_position=lambda: FIRST_HALF_CROSSED,
         ),
         create_move(
-            label="Offer Left Hand Inside Turn(s)",
+            label="Offer Hand + Drop",
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE,
         ),
         create_move(
-            label="Keep Hand - Offer Left Hand Inside Turn(s)",
+            label="Offer Hand + Hold",
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED_BOTH,
         )
     ],
 )
@@ -688,10 +718,10 @@ SECOND_HALF_CROSSED_OPPOSITE = create_position(
             dest_position=lambda: FIRST_HALF,
         ),
         create_move(
-            label="Offer Right Hand Outside Turn(s)",
+            label="Offer Hand + Drop",
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_CROSSED,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED,
         ),
         create_move(
             label="Inside Turn(s)",

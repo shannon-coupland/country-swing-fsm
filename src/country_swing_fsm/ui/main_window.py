@@ -51,13 +51,13 @@ GROUPED_ROW_SPACING = max(ROW_SPACING / 3.0, CIRCLE_DIAMETER + 24.0)
 DIMMED_OPACITY = 0.18
 SELECTION_KIND_DATA_KEY = 0
 SELECTION_ID_DATA_KEY = 1
-OUTER_CIRCLE_PEN_WIDTH = 2.0
+OUTER_CIRCLE_PEN_WIDTH = 3.0
 INNER_CIRCLE_DIAMETER = 28.0
 INNER_CIRCLE_RADIUS = INNER_CIRCLE_DIAMETER / 2.0
 INNER_CIRCLE_VERTICAL_OFFSET = 22.0
 INNER_CIRCLE_TEXT_SIZE = 12.0
 CONNECTION_PEN_WIDTH = 3.0
-CONNECTION_OUTLINE_PEN_WIDTH = 5.0
+CONNECTION_OUTLINE_PEN_WIDTH = 7.0
 
 GROUP_ORDER = {
     (False, 1): 0,
@@ -142,7 +142,11 @@ class MainWindow(QMainWindow):
         mode_layout = QHBoxLayout(mode_container)
         mode_layout.setContentsMargins(0, 0, 8, 0)
         mode_layout.setSpacing(6)
-        mode_layout.addWidget(QLabel("Lead Mode"))
+        lead_mode_label = QLabel("Lead Mode")
+        lead_mode_label.setStyleSheet(
+            f"color: {LEAD_DIAGRAM_COLOR.name()}; font-weight: 700;"
+        )
+        mode_layout.addWidget(lead_mode_label)
         mode_slider = QSlider(Qt.Orientation.Horizontal)
         mode_slider.setRange(0, 1)
         mode_slider.setValue(0)
@@ -152,7 +156,11 @@ class MainWindow(QMainWindow):
         mode_slider.setTickInterval(1)
         mode_slider.valueChanged.connect(self._on_mode_changed)
         mode_layout.addWidget(mode_slider)
-        mode_layout.addWidget(QLabel("Follow Mode"))
+        follow_mode_label = QLabel("Follow Mode")
+        follow_mode_label.setStyleSheet(
+            f"color: {FOLLOW_DIAGRAM_COLOR.name()}; font-weight: 700;"
+        )
+        mode_layout.addWidget(follow_mode_label)
         layout.addWidget(mode_container)
 
         self._add_position_selector_button(layout)
@@ -877,7 +885,9 @@ def _add_role_circle_items(
     _set_item_focus_data(circle, "position", position_key)
     scene.addItem(circle)
 
-    text_item = QGraphicsSimpleTextItem(sub_position.start_step_foot.value[:1].upper())
+    text_item = QGraphicsSimpleTextItem(
+        "LS" if sub_position.start_step_foot == Direction.LEFT else "RS"
+    )
     text_item.setBrush(QBrush(TEXT_COLOR))
     font = text_item.font()
     font.setPointSizeF(INNER_CIRCLE_TEXT_SIZE)
@@ -955,11 +965,17 @@ def _add_move_edge(
         color = LEFT_COLOR if move.source.lead_start_step_foot == Direction.LEFT else RIGHT_COLOR
     pen = QPen(color, 3)
 
-    start = _source_circle_edge_point(move.source, source_center)
-    end = _destination_circle_edge_point(move.destination, destination_center)
+    start_quadrant, end_quadrant, start_direction, end_direction = _edge_routing(
+        move.source,
+        move.destination,
+    )
+    start = _circle_quadrant_point(source_center, start_quadrant)
+    end = _circle_quadrant_point(destination_center, end_quadrant)
     path = _build_edge_path(
         start=start,
         end=end,
+        start_direction=start_direction,
+        end_direction=end_direction,
         curvature_offset=_curvature_offset(
             source_center=source_center,
             destination_center=destination_center,
@@ -976,42 +992,73 @@ def _add_move_edge(
     return [path_item, arrow_item, label_item]
 
 
-def _source_circle_edge_point(position: Position, center: QPointF) -> QPointF:
+def _circle_quadrant_point(center: QPointF, quadrant: str) -> QPointF:
     radius = CIRCLE_DIAMETER / 2.0
     horizontal_offset = (3.0**0.5 / 2.0) * radius
     vertical_offset = 0.5 * radius
 
-    if position.lead_start_step_foot == Direction.LEFT:
-        return QPointF(center.x() + horizontal_offset, center.y() - vertical_offset)
-
-    return QPointF(center.x() - horizontal_offset, center.y() + vertical_offset)
-
-
-def _destination_circle_edge_point(position: Position, center: QPointF) -> QPointF:
-    radius = CIRCLE_DIAMETER / 2.0
-    horizontal_offset = (3.0**0.5 / 2.0) * radius
-    vertical_offset = 0.5 * radius
-
-    if position.lead_start_step_foot == Direction.LEFT:
-        return QPointF(center.x() + horizontal_offset, center.y() + vertical_offset)
-
-    return QPointF(center.x() - horizontal_offset, center.y() - vertical_offset)
+    quadrant_offsets = {
+        "top_left": (-horizontal_offset, -vertical_offset),
+        "top_right": (horizontal_offset, -vertical_offset),
+        "bottom_left": (-horizontal_offset, vertical_offset),
+        "bottom_right": (horizontal_offset, vertical_offset),
+    }
+    x_offset, y_offset = quadrant_offsets[quadrant]
+    return QPointF(center.x() + x_offset, center.y() + y_offset)
 
 
-def _build_edge_path(start: QPointF, end: QPointF, curvature_offset: float) -> QPainterPath:
+def _build_edge_path(
+    start: QPointF,
+    end: QPointF,
+    start_direction: str,
+    end_direction: str,
+    curvature_offset: float,
+) -> QPainterPath:
     path = QPainterPath(start)
     control_offset = max(abs(end.x() - start.x()) * 0.25, 70.0)
-    direction = 1.0 if end.x() >= start.x() else -1.0
+    start_sign = 1.0 if start_direction == "right" else -1.0
+    end_sign = 1.0 if end_direction == "right" else -1.0
     control_one = QPointF(
-        start.x() + (control_offset * direction),
+        start.x() + (control_offset * start_sign),
         start.y() + curvature_offset,
     )
     control_two = QPointF(
-        end.x() - (control_offset * direction),
+        end.x() - (control_offset * end_sign),
         end.y() + curvature_offset,
     )
     path.cubicTo(control_one, control_two, end)
     return path
+
+
+def _edge_routing(
+    source: Position,
+    destination: Position,
+) -> tuple[str, str, str, str]:
+    source_side = _position_side(source)
+    destination_side = _position_side(destination)
+
+    routing_table = {
+        ("left", "right"): ("top_right", "top_left", "right", "right"),
+        ("left", "left"): ("top_left", "bottom_left", "left", "right"),
+        ("left", "impact"): ("top_right", "top_left", "right", "right"),
+        ("right", "left"): ("bottom_left", "bottom_right", "left", "left"),
+        ("right", "right"): ("top_right", "bottom_right", "right", "left"),
+        ("right", "impact"): ("bottom_left", "top_right", "left", "left"),
+        ("impact", "left"): ("top_left", "bottom_right", "left", "left"),
+        ("impact", "right"): ("top_right", "top_left", "right", "right"),
+    }
+    return routing_table.get(
+        (source_side, destination_side),
+        ("top_right", "top_left", "right", "right"),
+    )
+
+
+def _position_side(position: Position) -> str:
+    if position.position_type == PositionType.IMPACT:
+        return "impact"
+    if position.lead_start_step_foot == Direction.LEFT:
+        return "left"
+    return "right"
 
 
 def _curvature_offset(
