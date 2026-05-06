@@ -5,6 +5,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QAction, QBrush, QColor, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 from PySide6.QtWidgets import (
+    QCheckBox,
     QGraphicsEllipseItem,
     QGraphicsItem,
     QGraphicsPathItem,
@@ -101,6 +102,7 @@ class MainWindow(QMainWindow):
         }
         self.visible_position_keys: set[str] = set(self.position_lookup_by_key)
         self.display_role = Role.LEAD
+        self.offer_hand_passthrough = False
         self.selected_focus: tuple[str, str] | None = None
         self.filter_options_by_key: dict[str, FilterOption] = {
             option.key: option
@@ -147,7 +149,7 @@ class MainWindow(QMainWindow):
             f"color: {LEAD_DIAGRAM_COLOR.name()}; font-weight: 700;"
         )
         mode_layout.addWidget(lead_mode_label)
-        mode_slider = QSlider(Qt.Orientation.Horizontal)
+        mode_slider = ModeToggleSlider()
         mode_slider.setRange(0, 1)
         mode_slider.setValue(0)
         mode_slider.setFixedWidth(42)
@@ -183,6 +185,9 @@ class MainWindow(QMainWindow):
         clear_button.clicked.connect(self._clear_all_filters)
         layout.addWidget(clear_button)
         layout.addStretch(1)
+        offer_hand_passthrough_checkbox = QCheckBox("Offer Hand Passthrough")
+        offer_hand_passthrough_checkbox.toggled.connect(self._on_offer_hand_passthrough_toggled)
+        layout.addWidget(offer_hand_passthrough_checkbox)
         return bar
 
     def _add_position_selector_button(self, layout: QHBoxLayout) -> None:
@@ -328,6 +333,10 @@ class MainWindow(QMainWindow):
         self._update_position_action_labels()
         self._refresh_scene(preserve_view=True)
 
+    def _on_offer_hand_passthrough_toggled(self, checked: bool) -> None:
+        self.offer_hand_passthrough = checked
+        self._refresh_scene(preserve_view=True)
+
     def _refresh_scene(self, preserve_view: bool = False) -> None:
         visible_positions = [
             position
@@ -339,6 +348,7 @@ class MainWindow(QMainWindow):
             move
             for move in self.all_moves
             if id(move.source) in visible_position_ids and id(move.destination) in visible_position_ids
+            and (self.offer_hand_passthrough or not _is_same_side_move(move))
         ]
         filtered_graph = filter_graph(
             all_positions=visible_positions,
@@ -356,6 +366,7 @@ class MainWindow(QMainWindow):
                 filtered_graph.moves,
                 display_role=self.display_role,
                 selected_focus=self.selected_focus,
+                offer_hand_passthrough=self.offer_hand_passthrough,
                 on_focus_change=self._on_focus_change,
             ),
             preserve_view=preserve_view,
@@ -486,11 +497,24 @@ class InteractiveScene(QGraphicsScene):
         super().mousePressEvent(event)
 
 
+class ModeToggleSlider(QSlider):
+    def __init__(self) -> None:
+        super().__init__(Qt.Orientation.Horizontal)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.setValue(0 if self.value() == 1 else 1)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
 def build_scene(
     positions: list[Position],
     moves: list[Move],
     display_role: Role = Role.LEAD,
     selected_focus: tuple[str, str] | None = None,
+    offer_hand_passthrough: bool = False,
     on_focus_change: Callable[[tuple[str, str] | None], None] | None = None,
 ) -> QGraphicsScene:
     scene = InteractiveScene(on_focus_change=on_focus_change)
@@ -612,6 +636,7 @@ def build_scene(
         positions_by_key={_position_option_key(position): position for position in positions},
         moves_by_key={_move_option_key(move): move for move in filtered_moves},
         selected_focus=selected_focus,
+        offer_hand_passthrough=offer_hand_passthrough,
     )
 
     scene.setSceneRect(scene.itemsBoundingRect().adjusted(-80.0, -60.0, 80.0, 60.0))
@@ -1130,6 +1155,7 @@ def _apply_focus_state(
     positions_by_key: dict[str, Position],
     moves_by_key: dict[str, Move],
     selected_focus: tuple[str, str] | None,
+    offer_hand_passthrough: bool,
 ) -> None:
     if selected_focus is None:
         return
@@ -1150,6 +1176,21 @@ def _apply_focus_state(
             _move_option_key(move)
             for move in visible_outgoing_moves
         }
+        if offer_hand_passthrough:
+            passthrough_positions = [
+                move.destination
+                for move in visible_outgoing_moves
+                if _is_same_side_move(move)
+            ]
+            passthrough_moves = [
+                move
+                for move in moves_by_key.values()
+                if move.source in passthrough_positions
+            ]
+            highlighted_position_keys.update(
+                _position_option_key(move.destination) for move in passthrough_moves
+            )
+            highlighted_move_keys.update(_move_option_key(move) for move in passthrough_moves)
     elif selection_kind == "move" and selection_key in moves_by_key:
         selected_move = moves_by_key[selection_key]
         highlighted_position_keys = {
@@ -1185,3 +1226,11 @@ def _selection_for_item(item: QGraphicsItem | None) -> tuple[str, str] | None:
             return str(selection_kind), str(selection_key)
         current_item = current_item.parentItem()
     return None
+
+
+def _is_same_side_move(move: Move) -> bool:
+    if move.source is move.destination:
+        return False
+    source_side = _position_side(move.source)
+    destination_side = _position_side(move.destination)
+    return source_side in {"left", "right"} and source_side == destination_side
