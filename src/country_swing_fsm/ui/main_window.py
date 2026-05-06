@@ -1,18 +1,24 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QAction, QBrush, QColor, QPainter, QPainterPath, QPen, QPolygonF
+from PySide6.QtGui import QAction, QBrush, QColor, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 from PySide6.QtWidgets import (
     QGraphicsEllipseItem,
+    QGraphicsItem,
     QGraphicsPathItem,
+    QGraphicsPolygonItem,
     QGraphicsScene,
     QGraphicsSimpleTextItem,
     QGraphicsTextItem,
     QGraphicsView,
     QHBoxLayout,
+    QLabel,
     QMainWindow,
     QMenu,
     QPushButton,
+    QSlider,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -39,6 +45,9 @@ IMPACT_SPACING = 180.0
 TOP_MARGIN = 80.0
 ROW_SPACING = 220.0
 GROUPED_ROW_SPACING = max(ROW_SPACING / 3.0, CIRCLE_DIAMETER + 24.0)
+DIMMED_OPACITY = 0.18
+SELECTION_KIND_DATA_KEY = 0
+SELECTION_ID_DATA_KEY = 1
 
 GROUP_ORDER = {
     (False, 1): 0,
@@ -56,7 +65,7 @@ DIRECTION_ORDER = {
     Direction.RIGHT: 1,
 }
 FILTER_BUTTON_TITLES = {
-    "positions": "Positions",
+    "position_types": "Position Types",
     "lead_moves": "Lead Moves",
     "follow_moves": "Follow Moves",
 }
@@ -69,12 +78,20 @@ class MainWindow(QMainWindow):
         self.all_moves = moves
         self.filter_options = build_filter_options(positions, moves)
         self.selected_filter_keys: dict[str, set[str]] = {
-            "positions": set(),
+            "position_types": set(),
             "lead_moves": set(),
             "follow_moves": set(),
         }
         self.filter_buttons: dict[str, QToolButton] = {}
         self.filter_actions: dict[str, list[QAction]] = {}
+        self.position_button: QToolButton | None = None
+        self.position_actions_by_key: dict[str, QAction] = {}
+        self.position_lookup_by_key: dict[str, Position] = {
+            _position_option_key(position): position for position in self.all_positions
+        }
+        self.visible_position_keys: set[str] = set(self.position_lookup_by_key)
+        self.display_role = Role.LEAD
+        self.selected_focus: tuple[str, str] | None = None
         self.filter_options_by_key: dict[str, FilterOption] = {
             option.key: option
             for option in (
@@ -111,9 +128,27 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(8)
 
+        mode_container = QWidget()
+        mode_layout = QHBoxLayout(mode_container)
+        mode_layout.setContentsMargins(0, 0, 8, 0)
+        mode_layout.setSpacing(6)
+        mode_layout.addWidget(QLabel("Lead Mode"))
+        mode_slider = QSlider(Qt.Orientation.Horizontal)
+        mode_slider.setRange(0, 1)
+        mode_slider.setValue(0)
+        mode_slider.setFixedWidth(42)
+        mode_slider.setSingleStep(1)
+        mode_slider.setPageStep(1)
+        mode_slider.setTickInterval(1)
+        mode_slider.valueChanged.connect(self._on_mode_changed)
+        mode_layout.addWidget(mode_slider)
+        mode_layout.addWidget(QLabel("Follow Mode"))
+        layout.addWidget(mode_container)
+
+        self._add_position_selector_button(layout)
         self._add_filter_button(
             layout,
-            "positions",
+            "position_types",
             self.filter_options.position_options,
         )
         self._add_filter_button(
@@ -131,6 +166,33 @@ class MainWindow(QMainWindow):
         layout.addWidget(clear_button)
         layout.addStretch(1)
         return bar
+
+    def _add_position_selector_button(self, layout: QHBoxLayout) -> None:
+        button = QToolButton()
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        button.setAutoRaise(True)
+        button.setStyleSheet("QToolButton { padding: 4px 10px; }")
+
+        menu = PersistentFilterMenu(button)
+        for position in self._sorted_position_selector_positions():
+            position_key = _position_option_key(position)
+            action = QAction(_display_position_label(position, self.display_role), menu)
+            action.setCheckable(True)
+            action.setChecked(True)
+            action.setData(position_key)
+            action.toggled.connect(
+                lambda checked, position_key=position_key: self._on_position_visibility_toggled(
+                    position_key,
+                    checked,
+                )
+            )
+            menu.addAction(action)
+            self.position_actions_by_key[position_key] = action
+
+        button.setMenu(menu)
+        self.position_button = button
+        self._update_position_selector_label()
+        layout.addWidget(button)
 
     def _add_filter_button(
         self,
@@ -191,6 +253,15 @@ class MainWindow(QMainWindow):
         if not self._suppress_refresh:
             self._refresh_scene()
 
+    def _on_position_visibility_toggled(self, position_key: str, checked: bool) -> None:
+        if checked:
+            self.visible_position_keys.add(position_key)
+        else:
+            self.visible_position_keys.discard(position_key)
+        self._update_position_selector_label()
+        if not self._suppress_refresh:
+            self._refresh_scene()
+
     def _clear_all_filters(self) -> None:
         self._suppress_refresh = True
         try:
@@ -200,6 +271,11 @@ class MainWindow(QMainWindow):
                     if action.isChecked():
                         action.setChecked(False)
                 self._update_filter_button_label(filter_key)
+            self.visible_position_keys = set(self.position_lookup_by_key)
+            for action in self.position_actions_by_key.values():
+                if not action.isChecked():
+                    action.setChecked(True)
+            self._update_position_selector_label()
         finally:
             self._suppress_refresh = False
 
@@ -217,18 +293,96 @@ class MainWindow(QMainWindow):
         label = base_title if selected_count == 0 else f"{base_title} ({selected_count})"
         self.filter_buttons[filter_key].setText(label)
 
-    def _refresh_scene(self) -> None:
+    def _update_position_selector_label(self) -> None:
+        if self.position_button is None:
+            return
+
+        total_count = len(self.position_lookup_by_key)
+        visible_count = len(self.visible_position_keys)
+        if visible_count == total_count:
+            label = "Positions"
+        else:
+            label = f"Positions ({visible_count})"
+        self.position_button.setText(label)
+
+    def _on_mode_changed(self, value: int) -> None:
+        self.display_role = Role.FOLLOW if value == 1 else Role.LEAD
+        self._update_position_action_labels()
+        self._refresh_scene(preserve_view=True)
+
+    def _refresh_scene(self, preserve_view: bool = False) -> None:
+        visible_positions = [
+            position
+            for position_key, position in self.position_lookup_by_key.items()
+            if position_key in self.visible_position_keys
+        ]
+        visible_position_ids = {id(position) for position in visible_positions}
+        visible_moves = [
+            move
+            for move in self.all_moves
+            if id(move.source) in visible_position_ids and id(move.destination) in visible_position_ids
+        ]
         filtered_graph = filter_graph(
-            all_positions=self.all_positions,
-            all_moves=self.all_moves,
+            all_positions=visible_positions,
+            all_moves=visible_moves,
             position_options=self.filter_options.position_options,
-            selected_position_keys=self.selected_filter_keys["positions"],
+            selected_position_keys=self.selected_filter_keys["position_types"],
             lead_move_options=self.filter_options.lead_move_options,
             selected_lead_move_keys=self.selected_filter_keys["lead_moves"],
             follow_move_options=self.filter_options.follow_move_options,
             selected_follow_move_keys=self.selected_filter_keys["follow_moves"],
         )
-        self.view.load_scene(build_scene(filtered_graph.positions, filtered_graph.moves))
+        self.view.load_scene(
+            build_scene(
+                filtered_graph.positions,
+                filtered_graph.moves,
+                display_role=self.display_role,
+                selected_focus=self.selected_focus,
+                on_focus_change=self._on_focus_change,
+            ),
+            preserve_view=preserve_view,
+        )
+
+    def _update_position_action_labels(self) -> None:
+        for position_key, action in self.position_actions_by_key.items():
+            action.setText(
+                _display_position_label(
+                    self.position_lookup_by_key[position_key],
+                    self.display_role,
+                )
+            )
+
+    def _sorted_position_selector_positions(self) -> list[Position]:
+        left_positions = _sorted_column_positions(
+            [
+                position
+                for position in self.all_positions
+                if (
+                    position.position_type != PositionType.IMPACT
+                    and position.lead_start_step_foot == Direction.LEFT
+                )
+            ]
+        )
+        right_positions = _sorted_column_positions(
+            [
+                position
+                for position in self.all_positions
+                if (
+                    position.position_type != PositionType.IMPACT
+                    and position.lead_start_step_foot == Direction.RIGHT
+                )
+            ]
+        )
+        impact_positions = _sorted_impact_positions(
+            [position for position in self.all_positions if position.position_type == PositionType.IMPACT]
+        )
+        return [*left_positions, *right_positions, *impact_positions]
+
+    def _on_focus_change(self, selected_focus: tuple[str, str] | None) -> None:
+        if self.selected_focus == selected_focus:
+            return
+        self.selected_focus = selected_focus
+        self._refresh_scene(preserve_view=True)
 
 
 class DiagramView(QGraphicsView):
@@ -266,9 +420,19 @@ class DiagramView(QGraphicsView):
 
         super().wheelEvent(event)
 
-    def load_scene(self, scene: QGraphicsScene) -> None:
-        self._has_manual_zoom = False
+    def load_scene(self, scene: QGraphicsScene, preserve_view: bool = False) -> None:
+        previous_transform = self.transform()
+        previous_center = self.mapToScene(self.viewport().rect().center())
+
+        if not preserve_view:
+            self._has_manual_zoom = False
+
         self.setScene(scene)
+        if preserve_view:
+            self.setTransform(previous_transform)
+            self.centerOn(previous_center)
+            return
+
         self._fit_scene()
 
     def _fit_scene(self) -> None:
@@ -288,8 +452,30 @@ class PersistentFilterMenu(QMenu):
         super().mouseReleaseEvent(event)
 
 
-def build_scene(positions: list[Position], moves: list[Move]) -> QGraphicsScene:
-    scene = QGraphicsScene()
+class InteractiveScene(QGraphicsScene):
+    def __init__(
+        self,
+        on_focus_change: Callable[[tuple[str, str] | None], None] | None = None,
+    ) -> None:
+        super().__init__()
+        self._on_focus_change = on_focus_change
+
+    def mousePressEvent(self, event) -> None:
+        clicked_item = self.itemAt(event.scenePos(), QTransform())
+        selection = _selection_for_item(clicked_item)
+        if self._on_focus_change is not None:
+            self._on_focus_change(selection)
+        super().mousePressEvent(event)
+
+
+def build_scene(
+    positions: list[Position],
+    moves: list[Move],
+    display_role: Role = Role.LEAD,
+    selected_focus: tuple[str, str] | None = None,
+    on_focus_change: Callable[[tuple[str, str] | None], None] | None = None,
+) -> QGraphicsScene:
+    scene = InteractiveScene(on_focus_change=on_focus_change)
     scene.setBackgroundBrush(BACKGROUND_COLOR)
 
     included_positions_by_id = {id(position): position for position in positions}
@@ -329,6 +515,8 @@ def build_scene(positions: list[Position], moves: list[Move]) -> QGraphicsScene:
     )
 
     centers_by_position_id: dict[int, QPointF] = {}
+    position_items_by_key: dict[str, list[QGraphicsItem]] = {}
+    move_items_by_key: dict[str, list[QGraphicsItem]] = {}
 
     _add_column_header(scene, "Lead starts LEFT", LEFT_COLUMN_X, LEFT_COLOR)
     _add_column_header(scene, "Lead starts RIGHT", right_column_x, RIGHT_COLOR)
@@ -341,21 +529,27 @@ def build_scene(positions: list[Position], moves: list[Move]) -> QGraphicsScene:
     for index, position in enumerate(left_positions):
         center = QPointF(LEFT_COLUMN_X, left_y_positions[index])
         centers_by_position_id[id(position)] = center
-        _add_position_node(
+        position_key = _position_option_key(position)
+        position_items_by_key[position_key] = _add_position_node(
             scene,
             position,
             center,
             _position_color(position, LEFT_COLOR, LEFT_TWISTED_COLOR),
+            display_role,
+            position_key,
         )
 
     for index, position in enumerate(right_positions):
         center = QPointF(right_column_x, right_y_positions[index])
         centers_by_position_id[id(position)] = center
-        _add_position_node(
+        position_key = _position_option_key(position)
+        position_items_by_key[position_key] = _add_position_node(
             scene,
             position,
             center,
             _position_color(position, RIGHT_COLOR, RIGHT_TWISTED_COLOR),
+            display_role,
+            position_key,
         )
 
     impact_row_start_x = ((LEFT_COLUMN_X + right_column_x) / 2.0) - (impact_row_width / 2.0)
@@ -367,7 +561,15 @@ def build_scene(positions: list[Position], moves: list[Move]) -> QGraphicsScene:
     for index, position in enumerate(impact_positions):
         center = QPointF(impact_row_start_x + (index * IMPACT_SPACING), impact_row_y)
         centers_by_position_id[id(position)] = center
-        _add_position_node(scene, position, center, IMPACT_COLOR)
+        position_key = _position_option_key(position)
+        position_items_by_key[position_key] = _add_position_node(
+            scene,
+            position,
+            center,
+            IMPACT_COLOR,
+            display_role,
+            position_key,
+        )
 
     parallel_move_groups: dict[tuple[int, int], list[Move]] = {}
     for move in filtered_moves:
@@ -376,13 +578,23 @@ def build_scene(positions: list[Position], moves: list[Move]) -> QGraphicsScene:
 
     for sibling_moves in parallel_move_groups.values():
         move = sibling_moves[0]
-        _add_move_edge(
+        move_key = _move_option_key(move)
+        move_items_by_key[move_key] = _add_move_edge(
             scene=scene,
             move=move,
             source_center=centers_by_position_id[id(move.source)],
             destination_center=centers_by_position_id[id(move.destination)],
             label="\n".join(sibling_move.label or "(unlabeled)" for sibling_move in sibling_moves),
+            move_key=move_key,
         )
+
+    _apply_focus_state(
+        position_items_by_key=position_items_by_key,
+        move_items_by_key=move_items_by_key,
+        positions_by_key={_position_option_key(position): position for position in positions},
+        moves_by_key={_move_option_key(move): move for move in filtered_moves},
+        selected_focus=selected_focus,
+    )
 
     scene.setSceneRect(scene.itemsBoundingRect().adjusted(-80.0, -60.0, 80.0, 60.0))
     return scene
@@ -492,7 +704,9 @@ def _add_position_node(
     position: Position,
     center: QPointF,
     color: QColor,
-) -> None:
+    display_role: Role,
+    position_key: str,
+) -> list[QGraphicsItem]:
     circle_rect = QRectF(
         center.x() - (CIRCLE_DIAMETER / 2.0),
         center.y() - (CIRCLE_DIAMETER / 2.0),
@@ -502,16 +716,52 @@ def _add_position_node(
     circle = QGraphicsEllipseItem(circle_rect)
     circle.setBrush(QBrush(color))
     circle.setPen(QPen(color.darker(120), 2))
+    _set_item_focus_data(circle, "position", position_key)
     scene.addItem(circle)
 
-    label = position.label or "(unlabeled)"
+    label = _display_position_label(position, display_role)
     text_item = QGraphicsTextItem(label)
     text_item.setDefaultTextColor(Qt.GlobalColor.white)
     text_item.setTextWidth(CIRCLE_DIAMETER - 20.0)
     text_item.document().setDocumentMargin(0.0)
     bounds = text_item.boundingRect()
     text_item.setPos(center.x() - (bounds.width() / 2.0), center.y() - (bounds.height() / 2.0))
+    _set_item_focus_data(text_item, "position", position_key)
     scene.addItem(text_item)
+    return [circle, text_item]
+
+
+def _display_position_label(position: Position, display_role: Role) -> str:
+    generated_label = _generated_position_label(position, display_role)
+    if position.label:
+        return f"{position.label} - {generated_label}"
+    return generated_label
+
+
+def _generated_position_label(position: Position, display_role: Role) -> str:
+    sub_position = position.sub_position_for_role(display_role)
+    step_label = f"{sub_position.start_step_foot.value.title()} Step"
+    hands_label = _generated_hands_label(sub_position.hands_joined)
+    if not sub_position.hands_joined:
+        return f"{step_label} {hands_label}"
+    crossed_label = "Crossed" if position.crossed else "Uncrossed"
+    return f"{step_label} {crossed_label} {hands_label}"
+
+
+def _generated_hands_label(hands_joined: list[Direction]) -> str:
+    if len(hands_joined) == 2:
+        return "Both Hands"
+    if len(hands_joined) == 1:
+        return f"{hands_joined[0].value.title()} Hand"
+    return "No Hands"
+
+
+def _position_option_key(position: Position) -> str:
+    return f"position:{id(position)}"
+
+
+def _move_option_key(move: Move) -> str:
+    return f"move:{id(move.source)}:{id(move.destination)}"
 
 
 def _position_color(position: Position, base_color: QColor, twisted_color: QColor) -> QColor:
@@ -526,7 +776,8 @@ def _add_move_edge(
     source_center: QPointF,
     destination_center: QPointF,
     label: str,
-) -> None:
+    move_key: str,
+) -> list[QGraphicsItem]:
     if move.source.position_type == PositionType.IMPACT:
         color = IMPACT_COLOR
     else:
@@ -546,10 +797,12 @@ def _add_move_edge(
 
     path_item = QGraphicsPathItem(path)
     path_item.setPen(pen)
+    _set_item_focus_data(path_item, "move", move_key)
     scene.addItem(path_item)
 
-    _add_arrow_head(scene, path, color)
-    _add_edge_label(scene, label, path, color, source_center)
+    arrow_item = _add_arrow_head(scene, path, color, move_key)
+    label_item = _add_edge_label(scene, label, path, color, source_center, move_key)
+    return [path_item, arrow_item, label_item]
 
 
 def _source_circle_edge_point(position: Position, center: QPointF) -> QPointF:
@@ -598,7 +851,12 @@ def _curvature_offset(
     return direction_bias
 
 
-def _add_arrow_head(scene: QGraphicsScene, path: QPainterPath, color: QColor) -> None:
+def _add_arrow_head(
+    scene: QGraphicsScene,
+    path: QPainterPath,
+    color: QColor,
+    move_key: str,
+) -> QGraphicsPolygonItem:
     end = path.pointAtPercent(1.0)
     near_end = path.pointAtPercent(0.96)
     dx = end.x() - near_end.x()
@@ -621,7 +879,9 @@ def _add_arrow_head(scene: QGraphicsScene, path: QPainterPath, color: QColor) ->
     )
 
     polygon = QPolygonF([end, left_point, right_point])
-    scene.addPolygon(polygon, QPen(color), QBrush(color))
+    polygon_item = scene.addPolygon(polygon, QPen(color), QBrush(color))
+    _set_item_focus_data(polygon_item, "move", move_key)
+    return polygon_item
 
 
 def _add_edge_label(
@@ -630,7 +890,8 @@ def _add_edge_label(
     path: QPainterPath,
     color: QColor,
     source_center: QPointF,
-) -> None:
+    move_key: str,
+) -> QGraphicsSimpleTextItem:
     label_item = QGraphicsSimpleTextItem(label)
     label_item.setBrush(QBrush(color.darker(125)))
     bounds = label_item.boundingRect()
@@ -640,4 +901,69 @@ def _add_edge_label(
     else:
         x_position = anchor.x() - (bounds.width() * 0.85)
     label_item.setPos(x_position, anchor.y() - bounds.height() - 6.0)
+    _set_item_focus_data(label_item, "move", move_key)
     scene.addItem(label_item)
+    return label_item
+
+
+def _apply_focus_state(
+    position_items_by_key: dict[str, list[QGraphicsItem]],
+    move_items_by_key: dict[str, list[QGraphicsItem]],
+    positions_by_key: dict[str, Position],
+    moves_by_key: dict[str, Move],
+    selected_focus: tuple[str, str] | None,
+) -> None:
+    if selected_focus is None:
+        return
+
+    selection_kind, selection_key = selected_focus
+    if selection_kind == "position" and selection_key in positions_by_key:
+        selected_position = positions_by_key[selection_key]
+        visible_outgoing_moves = [
+            move
+            for move in moves_by_key.values()
+            if move.source is selected_position
+        ]
+        highlighted_position_keys = {
+            selection_key,
+            *(_position_option_key(move.destination) for move in visible_outgoing_moves),
+        }
+        highlighted_move_keys = {
+            _move_option_key(move)
+            for move in visible_outgoing_moves
+        }
+    elif selection_kind == "move" and selection_key in moves_by_key:
+        selected_move = moves_by_key[selection_key]
+        highlighted_position_keys = {
+            _position_option_key(selected_move.source),
+            _position_option_key(selected_move.destination),
+        }
+        highlighted_move_keys = {selection_key}
+    else:
+        return
+
+    for position_key, items in position_items_by_key.items():
+        opacity = 1.0 if position_key in highlighted_position_keys else DIMMED_OPACITY
+        for item in items:
+            item.setOpacity(opacity)
+
+    for move_key, items in move_items_by_key.items():
+        opacity = 1.0 if move_key in highlighted_move_keys else DIMMED_OPACITY
+        for item in items:
+            item.setOpacity(opacity)
+
+
+def _set_item_focus_data(item: QGraphicsItem, selection_kind: str, selection_key: str) -> None:
+    item.setData(SELECTION_KIND_DATA_KEY, selection_kind)
+    item.setData(SELECTION_ID_DATA_KEY, selection_key)
+
+
+def _selection_for_item(item: QGraphicsItem | None) -> tuple[str, str] | None:
+    current_item = item
+    while current_item is not None:
+        selection_kind = current_item.data(SELECTION_KIND_DATA_KEY)
+        selection_key = current_item.data(SELECTION_ID_DATA_KEY)
+        if selection_kind and selection_key:
+            return str(selection_kind), str(selection_key)
+        current_item = current_item.parentItem()
+    return None

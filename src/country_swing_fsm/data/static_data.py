@@ -45,13 +45,14 @@ def create_move(
 
 
 def create_position(
-    label: str | None,
+    *,
     lead_start_step_foot: Direction,
     follow_start_step_foot: Direction,
     lead_hands_joined: list[Direction],
     follow_hands_joined: list[Direction],
     position_type: PositionType,
     moves: list[MoveDefinition],
+    label: str | None = None,
     crossed: bool | None = None,
     difficulty: Difficulty = Difficulty.BEGINNER,
 ) -> Position:
@@ -65,6 +66,12 @@ def create_position(
                 "crossed must not be supplied for single-hand positions; it is derived."
             )
         crossed = lead_hands_joined[0] == follow_hands_joined[0]
+    elif hand_count == 0:
+        if crossed is not None:
+            raise ValueError(
+                "crossed must not be supplied for no-hand positions; it is undefined."
+            )
+        crossed = None
     elif crossed is None:
         raise ValueError("crossed must be supplied for positions with other than one hand.")
 
@@ -139,7 +146,6 @@ def _build_all_moves() -> list[Move]:
 # First Half Basic Positions------------------------------------------------------------------------------------------------------------------
 
 FIRST_HALF = create_position(
-    label="First Half Uncrossed Left Hand",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT],
@@ -195,7 +201,6 @@ FIRST_HALF = create_position(
 )
 
 FIRST_HALF_OPPOSITE = create_position(
-    label="First Half Uncrossed Right Hand",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.RIGHT],
@@ -244,7 +249,6 @@ FIRST_HALF_CATCH = create_position(
 )
 
 FIRST_HALF_BOTH = create_position(
-    label="First Half Uncrossed 2 Hands",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
@@ -319,7 +323,6 @@ FIRST_HALF_BOTH_CUDDLE = create_position(
 )
 
 FIRST_HALF_CROSSED = create_position(
-    label="First Half Crossed Right Hand",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.RIGHT],
@@ -363,7 +366,6 @@ FIRST_HALF_CROSSED = create_position(
 )
 
 FIRST_HALF_CROSSED_OPPOSITE = create_position(
-    label="First Half Crossed Left Hand",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT],
@@ -400,7 +402,6 @@ FIRST_HALF_CROSSED_OPPOSITE = create_position(
 )
 
 FIRST_HALF_CROSSED_BOTH = create_position(
-    label="First Half Crossed 2 Hands",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
@@ -433,7 +434,6 @@ FIRST_HALF_CROSSED_BOTH = create_position(
 # Second Half Basic Positions------------------------------------------------------------------------------------------------------------------
 
 SECOND_HALF = create_position(
-    label="Second Half Uncrossed Left Hand",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT],
@@ -482,7 +482,6 @@ SECOND_HALF = create_position(
 )
 
 SECOND_HALF_OPPOSITE = create_position(
-    label="Second Half Uncrossed Right Hand",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.RIGHT],
@@ -543,7 +542,6 @@ SECOND_HALF_CATCH = create_position(
 )
 
 SECOND_HALF_BOTH = create_position(
-    label="Second Half Uncrossed 2 Hands",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
@@ -580,7 +578,7 @@ SECOND_HALF_BOTH = create_position(
 )
 
 SECOND_HALF_BOTH_TWISTED = create_position(
-    label="Second Half Uncrossed 2 Hands Twisted",
+    label="Twisted",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
@@ -624,7 +622,6 @@ SECOND_HALF_BOTH_HAMMERLOCK = create_position(
 )
 
 SECOND_HALF_CROSSED = create_position(
-    label="Second Half Crossed Right Hand",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.RIGHT],
@@ -671,7 +668,6 @@ SECOND_HALF_CROSSED = create_position(
 # If no offered_hand, then use hand of source state. If both hands joined on source state, ...?
 
 SECOND_HALF_CROSSED_OPPOSITE = create_position(
-    label="Second Half Crossed Left Hand",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT],
@@ -701,7 +697,6 @@ SECOND_HALF_CROSSED_OPPOSITE = create_position(
 )
 
 SECOND_HALF_CROSSED_BOTH = create_position(
-    label="Second Half Crossed 2 Hands",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
@@ -745,7 +740,6 @@ FIRST_HALF_DIP = create_position(
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[],
     follow_hands_joined=[],
-    crossed=False,
     position_type=PositionType.IMPACT,
     moves=[
         create_move(
@@ -781,7 +775,6 @@ FIRST_HALF_TRUST_FALL = create_position(
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[],
     follow_hands_joined=[],
-    crossed=False,
     position_type=PositionType.IMPACT,
     difficulty=Difficulty.INTERMEDIATE,
     moves=[
@@ -796,20 +789,20 @@ FIRST_HALF_TRUST_FALL = create_position(
 )
 
 SECOND_HALF_SHOULDER_LEAN = create_position(
-    label="Second Half Shoulder Lean",
-    lead_start_step_foot=Direction.RIGHT,
-    follow_start_step_foot=Direction.LEFT,
+    label="Entering Shoulder Lean",
+    lead_start_step_foot=Direction.LEFT,
+    follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.LEFT],
     position_type=PositionType.IMPACT,
     difficulty=Difficulty.INTERMEDIATE,
     moves=[
         create_move(
-            label="Arm Slide",
+            label="Lean and Arm Slide",
             is_lead_turn=False,
             is_follow_turn=False,
             difficulty=Difficulty.INTERMEDIATE,
-            dest_position=lambda: FIRST_HALF_OPPOSITE,
+            dest_position=lambda: SECOND_HALF_OPPOSITE,
         ),
         # TODO consider a move that uses connected lead left/follow left
     ],

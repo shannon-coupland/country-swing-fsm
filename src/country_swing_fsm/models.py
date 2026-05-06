@@ -15,7 +15,7 @@ class SubPosition:
 @dataclass(slots=True)
 class Position:
     label: str | None = None
-    crossed: bool = False
+    crossed: bool | None = None
     difficulty: Difficulty = Difficulty.BEGINNER
     position_type: PositionType = PositionType.NORMAL
     outgoing_moves: list[OutgoingMove] = field(default_factory=list)
