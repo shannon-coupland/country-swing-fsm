@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QAction, QBrush, QColor, QPainter, QPainterPath, QPen, QPolygonF, QTransform
+from PySide6.QtGui import QAction, QBrush, QColor, QPainter, QPainterPath, QPen, QPolygonF, QTextOption, QTransform
 from PySide6.QtWidgets import (
     QCheckBox,
     QGraphicsEllipseItem,
@@ -27,25 +27,28 @@ from PySide6.QtWidgets import (
 
 from country_swing_fsm.enums import Direction, PositionType, Role
 from country_swing_fsm.models import Move, Position
-from country_swing_fsm.ui.filtering import FilterOption, FilterOptions, build_filter_options, filter_graph
 
 
-LEFT_COLOR = QColor("#2563eb")
+LEFT_COLOR = QColor("#16a34a")
 RIGHT_COLOR = QColor("#f97316")
 IMPACT_COLOR = QColor("#9333ea")
+LEFT_FILL_COLOR = QColor("#dcfce7")
+RIGHT_FILL_COLOR = QColor("#ffedd5")
+IMPACT_FILL_COLOR = QColor("#f3e8ff")
 BACKGROUND_COLOR = QColor("#f8fafc")
 TOP_BAR_COLOR = QColor("#e2e8f0")
 TEXT_COLOR = QColor("#0f172a")
 LEAD_DIAGRAM_COLOR = QColor("#ec4899")
-FOLLOW_DIAGRAM_COLOR = QColor("#22c55e")
+FOLLOW_DIAGRAM_COLOR = QColor("#2563eb")
 DIAGRAM_LINE_COLOR = QColor("#334155")
 DIAGRAM_LINE_OUTLINE_COLOR = QColor("#ffffff")
 
 CIRCLE_DIAMETER = 120.0
 LEFT_COLUMN_X = 120.0
-RIGHT_COLUMN_X = 680.0
+MAIN_COLUMN_GAP = 800.0
+RIGHT_COLUMN_X = LEFT_COLUMN_X + MAIN_COLUMN_GAP
 IMPACT_START_X = 220.0
-IMPACT_SPACING = 180.0
+IMPACT_SPACING = 160.0
 TOP_MARGIN = 80.0
 ROW_SPACING = 220.0
 GROUPED_ROW_SPACING = max(ROW_SPACING / 3.0, CIRCLE_DIAMETER + 24.0)
@@ -59,6 +62,10 @@ INNER_CIRCLE_VERTICAL_OFFSET = 22.0
 INNER_CIRCLE_TEXT_SIZE = 12.0
 CONNECTION_PEN_WIDTH = 3.0
 CONNECTION_OUTLINE_PEN_WIDTH = 7.0
+POSITION_ID_OFFSET = -18.0
+POSITION_ID_TEXT_SIZE = 22.0
+POSITION_LABEL_TEXT_SIZE = 12.0
+MOVE_LABEL_TEXT_SIZE = 11.0
 
 GROUP_ORDER = {
     (False, 1): 0,
@@ -75,26 +82,11 @@ DIRECTION_ORDER = {
     Direction.LEFT: 0,
     Direction.RIGHT: 1,
 }
-FILTER_BUTTON_TITLES = {
-    "position_types": "Position Types",
-    "lead_moves": "Lead Moves",
-    "follow_moves": "Follow Moves",
-}
-
-
 class MainWindow(QMainWindow):
     def __init__(self, positions: list[Position], moves: list[Move]) -> None:
         super().__init__()
         self.all_positions = positions
         self.all_moves = moves
-        self.filter_options = build_filter_options(positions, moves)
-        self.selected_filter_keys: dict[str, set[str]] = {
-            "position_types": set(),
-            "lead_moves": set(),
-            "follow_moves": set(),
-        }
-        self.filter_buttons: dict[str, QToolButton] = {}
-        self.filter_actions: dict[str, list[QAction]] = {}
         self.position_button: QToolButton | None = None
         self.position_actions_by_key: dict[str, QAction] = {}
         self.position_lookup_by_key: dict[str, Position] = {
@@ -103,15 +95,8 @@ class MainWindow(QMainWindow):
         self.visible_position_keys: set[str] = set(self.position_lookup_by_key)
         self.display_role = Role.LEAD
         self.offer_hand_passthrough = False
+        self.show_incoming_moves = False
         self.selected_focus: tuple[str, str] | None = None
-        self.filter_options_by_key: dict[str, FilterOption] = {
-            option.key: option
-            for option in (
-                *self.filter_options.position_options,
-                *self.filter_options.lead_move_options,
-                *self.filter_options.follow_move_options,
-            )
-        }
         self._suppress_refresh = False
 
         self.setWindowTitle("Country Swing FSM")
@@ -152,7 +137,7 @@ class MainWindow(QMainWindow):
         mode_slider = ModeToggleSlider()
         mode_slider.setRange(0, 1)
         mode_slider.setValue(0)
-        mode_slider.setFixedWidth(42)
+        mode_slider.setFixedWidth(32)
         mode_slider.setSingleStep(1)
         mode_slider.setPageStep(1)
         mode_slider.setTickInterval(1)
@@ -165,41 +150,50 @@ class MainWindow(QMainWindow):
         mode_layout.addWidget(follow_mode_label)
         layout.addWidget(mode_container)
 
-        self._add_position_selector_button(layout)
-        self._add_filter_button(
-            layout,
-            "position_types",
-            self.filter_options.position_options,
+        center_container = QWidget()
+        center_layout = QHBoxLayout(center_container)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(8)
+        self._add_position_selector_button(center_layout)
+        show_all_positions_button = QPushButton("Show All")
+        show_all_positions_button.clicked.connect(self._show_all_positions)
+        show_all_positions_button.setFlat(True)
+        show_all_positions_button.setStyleSheet(
+            f"QPushButton {{ background-color: {TOP_BAR_COLOR.name()}; border: 1px solid #94a3b8; border-radius: 6px; padding: 4px 10px; color: {TEXT_COLOR.name()}; }}"
         )
-        self._add_filter_button(
-            layout,
-            "lead_moves",
-            self.filter_options.lead_move_options,
+        center_layout.addWidget(show_all_positions_button)
+        show_no_positions_button = QPushButton("Show None")
+        show_no_positions_button.clicked.connect(self._show_no_positions)
+        show_no_positions_button.setFlat(True)
+        show_no_positions_button.setStyleSheet(
+            f"QPushButton {{ background-color: {TOP_BAR_COLOR.name()}; border: 1px solid #94a3b8; border-radius: 6px; padding: 4px 10px; color: {TEXT_COLOR.name()}; }}"
         )
-        self._add_filter_button(
-            layout,
-            "follow_moves",
-            self.filter_options.follow_move_options,
-        )
-        clear_button = QPushButton("Clear All Filters")
-        clear_button.clicked.connect(self._clear_all_filters)
-        layout.addWidget(clear_button)
+        center_layout.addWidget(show_no_positions_button)
+
         layout.addStretch(1)
-        offer_hand_passthrough_checkbox = QCheckBox("Offer Hand Passthrough")
+        layout.addWidget(center_container)
+        layout.addStretch(1)
+
+        offer_hand_passthrough_checkbox = QCheckBox("Offer/Drop Hand Passthrough")
         offer_hand_passthrough_checkbox.toggled.connect(self._on_offer_hand_passthrough_toggled)
         layout.addWidget(offer_hand_passthrough_checkbox)
+        show_incoming_moves_checkbox = QCheckBox("Show Incoming Moves")
+        show_incoming_moves_checkbox.toggled.connect(self._on_show_incoming_moves_toggled)
+        layout.addWidget(show_incoming_moves_checkbox)
         return bar
 
     def _add_position_selector_button(self, layout: QHBoxLayout) -> None:
         button = QToolButton()
         button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         button.setAutoRaise(True)
-        button.setStyleSheet("QToolButton { padding: 4px 10px; }")
+        button.setStyleSheet(
+            f"QToolButton {{ background-color: {TOP_BAR_COLOR.name()}; border: 1px solid #94a3b8; border-radius: 6px; padding: 4px 10px; color: {TEXT_COLOR.name()}; }}"
+        )
 
         menu = PersistentFilterMenu(button)
         for position in self._sorted_position_selector_positions():
             position_key = _position_option_key(position)
-            action = QAction(_display_position_label(position, self.display_role), menu)
+            action = QAction(_position_menu_label(position, self.display_role), menu)
             action.setCheckable(True)
             action.setChecked(True)
             action.setData(position_key)
@@ -217,65 +211,6 @@ class MainWindow(QMainWindow):
         self._update_position_selector_label()
         layout.addWidget(button)
 
-    def _add_filter_button(
-        self,
-        layout: QHBoxLayout,
-        filter_key: str,
-        options: tuple[FilterOption, ...],
-    ) -> None:
-        button = QToolButton()
-        button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        button.setAutoRaise(True)
-        button.setStyleSheet("QToolButton { padding: 4px 10px; }")
-        self.filter_actions[filter_key] = []
-
-        menu = PersistentFilterMenu(button)
-        previous_section_label: str | None = None
-        for option in options:
-            if previous_section_label != option.section_label:
-                if previous_section_label is not None:
-                    menu.addSeparator()
-                header_action = QAction(option.section_label, menu)
-                header_action.setEnabled(False)
-                menu.addAction(header_action)
-                previous_section_label = option.section_label
-
-            action = QAction(option.label, menu)
-            action.setCheckable(True)
-            action.setData(option.key)
-            action.toggled.connect(
-                lambda checked, filter_key=filter_key, option_key=option.key: self._on_filter_toggled(
-                    filter_key,
-                    option_key,
-                    checked,
-                )
-            )
-            menu.addAction(action)
-            self.filter_actions[filter_key].append(action)
-
-        button.setMenu(menu)
-        self.filter_buttons[filter_key] = button
-        self._update_filter_button_label(filter_key)
-        layout.addWidget(button)
-
-    def _on_filter_toggled(self, filter_key: str, option_key: str, checked: bool) -> None:
-        selected_keys = self.selected_filter_keys[filter_key]
-        if checked:
-            selected_keys.add(option_key)
-            opposite_key = self.filter_options_by_key[option_key].opposite_key
-            if opposite_key is not None and opposite_key in selected_keys:
-                selected_keys.discard(opposite_key)
-                self._suppress_refresh = True
-                try:
-                    self._set_action_checked(filter_key, opposite_key, False)
-                finally:
-                    self._suppress_refresh = False
-        else:
-            selected_keys.discard(option_key)
-        self._update_filter_button_label(filter_key)
-        if not self._suppress_refresh:
-            self._refresh_scene()
-
     def _on_position_visibility_toggled(self, position_key: str, checked: bool) -> None:
         if checked:
             self.visible_position_keys.add(position_key)
@@ -283,17 +218,11 @@ class MainWindow(QMainWindow):
             self.visible_position_keys.discard(position_key)
         self._update_position_selector_label()
         if not self._suppress_refresh:
-            self._refresh_scene()
+            self._refresh_scene(preserve_view=True)
 
-    def _clear_all_filters(self) -> None:
+    def _show_all_positions(self) -> None:
         self._suppress_refresh = True
         try:
-            for filter_key, selected_keys in self.selected_filter_keys.items():
-                selected_keys.clear()
-                for action in self.filter_actions[filter_key]:
-                    if action.isChecked():
-                        action.setChecked(False)
-                self._update_filter_button_label(filter_key)
             self.visible_position_keys = set(self.position_lookup_by_key)
             for action in self.position_actions_by_key.values():
                 if not action.isChecked():
@@ -302,19 +231,20 @@ class MainWindow(QMainWindow):
         finally:
             self._suppress_refresh = False
 
-        self._refresh_scene()
+        self._refresh_scene(preserve_view=True)
 
-    def _set_action_checked(self, filter_key: str, option_key: str, checked: bool) -> None:
-        for action in self.filter_actions[filter_key]:
-            if action.data() == option_key and action.isChecked() != checked:
-                action.setChecked(checked)
-                return
+    def _show_no_positions(self) -> None:
+        self._suppress_refresh = True
+        try:
+            self.visible_position_keys.clear()
+            for action in self.position_actions_by_key.values():
+                if action.isChecked():
+                    action.setChecked(False)
+            self._update_position_selector_label()
+        finally:
+            self._suppress_refresh = False
 
-    def _update_filter_button_label(self, filter_key: str) -> None:
-        base_title = FILTER_BUTTON_TITLES[filter_key]
-        selected_count = len(self.selected_filter_keys[filter_key])
-        label = base_title if selected_count == 0 else f"{base_title} ({selected_count})"
-        self.filter_buttons[filter_key].setText(label)
+        self._refresh_scene(preserve_view=True)
 
     def _update_position_selector_label(self) -> None:
         if self.position_button is None:
@@ -337,6 +267,10 @@ class MainWindow(QMainWindow):
         self.offer_hand_passthrough = checked
         self._refresh_scene(preserve_view=True)
 
+    def _on_show_incoming_moves_toggled(self, checked: bool) -> None:
+        self.show_incoming_moves = checked
+        self._refresh_scene(preserve_view=True)
+
     def _refresh_scene(self, preserve_view: bool = False) -> None:
         visible_positions = [
             position
@@ -348,38 +282,20 @@ class MainWindow(QMainWindow):
             move
             for move in self.all_moves
             if id(move.source) in visible_position_ids and id(move.destination) in visible_position_ids
-            and (self.offer_hand_passthrough or not _is_same_side_move(move))
+            and (self.offer_hand_passthrough or not move.is_offer_or_drop_hand)
         ]
-        filtered_graph = filter_graph(
-            all_positions=visible_positions,
-            all_moves=visible_moves,
-            position_options=self.filter_options.position_options,
-            selected_position_keys=self.selected_filter_keys["position_types"],
-            lead_move_options=self.filter_options.lead_move_options,
-            selected_lead_move_keys=self.selected_filter_keys["lead_moves"],
-            follow_move_options=self.filter_options.follow_move_options,
-            selected_follow_move_keys=self.selected_filter_keys["follow_moves"],
-        )
         self.view.load_scene(
             build_scene(
-                filtered_graph.positions,
-                filtered_graph.moves,
+                visible_positions,
+                visible_moves,
                 display_role=self.display_role,
                 selected_focus=self.selected_focus,
                 offer_hand_passthrough=self.offer_hand_passthrough,
+                show_incoming_moves=self.show_incoming_moves,
                 on_focus_change=self._on_focus_change,
             ),
             preserve_view=preserve_view,
         )
-
-    def _update_position_action_labels(self) -> None:
-        for position_key, action in self.position_actions_by_key.items():
-            action.setText(
-                _display_position_label(
-                    self.position_lookup_by_key[position_key],
-                    self.display_role,
-                )
-            )
 
     def _sorted_position_selector_positions(self) -> list[Position]:
         left_positions = _sorted_column_positions(
@@ -412,6 +328,15 @@ class MainWindow(QMainWindow):
             return
         self.selected_focus = selected_focus
         self._refresh_scene(preserve_view=True)
+
+    def _update_position_action_labels(self) -> None:
+        for position_key, action in self.position_actions_by_key.items():
+            action.setText(
+                _position_menu_label(
+                    self.position_lookup_by_key[position_key],
+                    self.display_role,
+                )
+            )
 
 
 class DiagramView(QGraphicsView):
@@ -515,6 +440,7 @@ def build_scene(
     display_role: Role = Role.LEAD,
     selected_focus: tuple[str, str] | None = None,
     offer_hand_passthrough: bool = False,
+    show_incoming_moves: bool = False,
     on_focus_change: Callable[[tuple[str, str] | None], None] | None = None,
 ) -> QGraphicsScene:
     scene = InteractiveScene(on_focus_change=on_focus_change)
@@ -560,8 +486,6 @@ def build_scene(
     position_items_by_key: dict[str, list[QGraphicsItem]] = {}
     move_items_by_key: dict[str, list[QGraphicsItem]] = {}
 
-    _add_column_header(scene, "Lead starts LEFT", LEFT_COLUMN_X, LEFT_COLOR)
-    _add_column_header(scene, "Lead starts RIGHT", right_column_x, RIGHT_COLOR)
 
     left_y_positions, right_y_positions = _aligned_column_y_positions(
         left_positions,
@@ -637,6 +561,7 @@ def build_scene(
         moves_by_key={_move_option_key(move): move for move in filtered_moves},
         selected_focus=selected_focus,
         offer_hand_passthrough=offer_hand_passthrough,
+        show_incoming_moves=show_incoming_moves,
     )
 
     scene.setSceneRect(scene.itemsBoundingRect().adjusted(-80.0, -60.0, 80.0, 60.0))
@@ -757,21 +682,29 @@ def _add_position_node(
         CIRCLE_DIAMETER,
     )
     circle = QGraphicsEllipseItem(circle_rect)
-    circle.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+    circle.setBrush(QBrush(_position_fill_color(position)))
     circle.setPen(QPen(outline_color, OUTER_CIRCLE_PEN_WIDTH))
     _set_item_focus_data(circle, "position", position_key)
     scene.addItem(circle)
 
     items: list[QGraphicsItem] = [circle]
+    items.append(_add_position_id_label(scene, position, center, outline_color, position_key))
     if position.position_type == PositionType.NORMAL:
         items.extend(_add_normal_position_diagram(scene, position, center, display_role, position_key))
         return items
 
     label = _display_position_label(position, display_role)
     text_item = QGraphicsTextItem(label)
-    text_item.setDefaultTextColor(TEXT_COLOR)
+    text_item.setDefaultTextColor(outline_color)
     text_item.setTextWidth(CIRCLE_DIAMETER - 20.0)
     text_item.document().setDocumentMargin(0.0)
+    text_option = text_item.document().defaultTextOption()
+    text_option.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    text_item.document().setDefaultTextOption(text_option)
+    font = text_item.font()
+    font.setPointSizeF(POSITION_LABEL_TEXT_SIZE)
+    font.setBold(True)
+    text_item.setFont(font)
     bounds = text_item.boundingRect()
     text_item.setPos(center.x() - (bounds.width() / 2.0), center.y() - (bounds.height() / 2.0))
     _set_item_focus_data(text_item, "position", position_key)
@@ -913,7 +846,7 @@ def _add_role_circle_items(
     text_item = QGraphicsSimpleTextItem(
         "LS" if sub_position.start_step_foot == Direction.LEFT else "RS"
     )
-    text_item.setBrush(QBrush(TEXT_COLOR))
+    text_item.setBrush(QBrush(Qt.GlobalColor.white))
     font = text_item.font()
     font.setPointSizeF(INNER_CIRCLE_TEXT_SIZE)
     font.setBold(True)
@@ -944,10 +877,9 @@ def _diagram_role_color(role: Role) -> QColor:
 
 
 def _display_position_label(position: Position, display_role: Role) -> str:
-    generated_label = _generated_position_label(position, display_role)
     if position.label:
-        return f"{position.label} - {generated_label}"
-    return generated_label
+        return position.label
+    return _generated_position_label(position, display_role)
 
 
 def _generated_position_label(position: Position, display_role: Role) -> str:
@@ -968,12 +900,54 @@ def _generated_hands_label(hands_joined: list[Direction]) -> str:
     return "No Hands"
 
 
+def _position_menu_label(position: Position, display_role: Role) -> str:
+    return f"{position.position_id} - {_display_position_label(position, display_role)}"
+
+
+def _add_position_id_label(
+    scene: QGraphicsScene,
+    position: Position,
+    center: QPointF,
+    color: QColor,
+    position_key: str,
+) -> QGraphicsSimpleTextItem:
+    text_item = QGraphicsSimpleTextItem(position.position_id)
+    text_item.setBrush(QBrush(color))
+    font = text_item.font()
+    font.setBold(True)
+    font.setPointSizeF(POSITION_ID_TEXT_SIZE)
+    text_item.setFont(font)
+    bounds = text_item.boundingRect()
+    radius = CIRCLE_DIAMETER / 2.0
+
+    side = _position_side(position)
+    if side in {"left", "impact"}:
+        x_position = center.x() - radius - bounds.width() - POSITION_ID_OFFSET
+    else:
+        x_position = center.x() + radius + POSITION_ID_OFFSET
+
+    y_position = center.y() - radius - bounds.height() - POSITION_ID_OFFSET
+    text_item.setPos(x_position, y_position)
+    _set_item_focus_data(text_item, "position", position_key)
+    scene.addItem(text_item)
+    return text_item
+
+
 def _position_option_key(position: Position) -> str:
     return f"position:{id(position)}"
 
 
 def _move_option_key(move: Move) -> str:
     return f"move:{id(move.source)}:{id(move.destination)}"
+
+
+def _position_fill_color(position: Position) -> QColor:
+    side = _position_side(position)
+    if side == "left":
+        return LEFT_FILL_COLOR
+    if side == "right":
+        return RIGHT_FILL_COLOR
+    return IMPACT_FILL_COLOR
 
 
 def _add_move_edge(
@@ -1137,6 +1111,9 @@ def _add_edge_label(
 ) -> QGraphicsSimpleTextItem:
     label_item = QGraphicsSimpleTextItem(label)
     label_item.setBrush(QBrush(color.darker(125)))
+    font = label_item.font()
+    font.setPointSizeF(MOVE_LABEL_TEXT_SIZE)
+    label_item.setFont(font)
     bounds = label_item.boundingRect()
     anchor = path.pointAtPercent(0.28)
     if source_center.x() < path.pointAtPercent(1.0).x():
@@ -1156,6 +1133,7 @@ def _apply_focus_state(
     moves_by_key: dict[str, Move],
     selected_focus: tuple[str, str] | None,
     offer_hand_passthrough: bool,
+    show_incoming_moves: bool,
 ) -> None:
     if selected_focus is None:
         return
@@ -1180,7 +1158,7 @@ def _apply_focus_state(
             passthrough_positions = [
                 move.destination
                 for move in visible_outgoing_moves
-                if _is_same_side_move(move)
+                if move.is_offer_or_drop_hand
             ]
             passthrough_moves = [
                 move
@@ -1191,6 +1169,16 @@ def _apply_focus_state(
                 _position_option_key(move.destination) for move in passthrough_moves
             )
             highlighted_move_keys.update(_move_option_key(move) for move in passthrough_moves)
+        if show_incoming_moves:
+            visible_incoming_moves = [
+                move
+                for move in moves_by_key.values()
+                if move.destination is selected_position
+            ]
+            highlighted_position_keys.update(
+                _position_option_key(move.source) for move in visible_incoming_moves
+            )
+            highlighted_move_keys.update(_move_option_key(move) for move in visible_incoming_moves)
     elif selection_kind == "move" and selection_key in moves_by_key:
         selected_move = moves_by_key[selection_key]
         highlighted_position_keys = {
@@ -1226,11 +1214,3 @@ def _selection_for_item(item: QGraphicsItem | None) -> tuple[str, str] | None:
             return str(selection_kind), str(selection_key)
         current_item = current_item.parentItem()
     return None
-
-
-def _is_same_side_move(move: Move) -> bool:
-    if move.source is move.destination:
-        return False
-    source_side = _position_side(move.source)
-    destination_side = _position_side(move.destination)
-    return source_side in {"left", "right"} and source_side == destination_side

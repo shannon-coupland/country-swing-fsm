@@ -14,6 +14,7 @@ class SubPosition:
 
 @dataclass(slots=True)
 class Position:
+    position_id: str = ""
     label: str | None = None
     crossed: bool | None = None
     difficulty: Difficulty = Difficulty.BEGINNER
@@ -69,6 +70,7 @@ class Move:
     source: Position
     destination: Position
     difficulty: Difficulty = Difficulty.BEGINNER
+    is_offer_or_drop_hand: bool = False
     sub_moves: list[SubMove] = field(default_factory=list)
 
     def __post_init__(self) -> None:

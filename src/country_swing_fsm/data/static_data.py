@@ -16,6 +16,7 @@ class MoveDefinition:
     is_lead_turn: bool
     is_follow_turn: bool
     difficulty: Difficulty
+    is_offer_or_drop_hand: bool
     destination_reference: DestinationReference
 
 
@@ -26,6 +27,21 @@ class PositionDefinition:
 
 
 _POSITION_DEFINITIONS: list[PositionDefinition] = []
+_GROUP_ORDER = {
+    (False, 1): 0,
+    (False, 2): 1,
+    (True, 1): 2,
+    (True, 2): 3,
+}
+_POSITION_TYPE_ORDER = {
+    PositionType.NORMAL: 0,
+    PositionType.TWISTED: 1,
+    PositionType.IMPACT: 2,
+}
+_DIRECTION_ORDER = {
+    Direction.LEFT: 0,
+    Direction.RIGHT: 1,
+}
 
 
 def create_move(
@@ -34,12 +50,14 @@ def create_move(
     is_follow_turn: bool,
     dest_position: DestinationReference,
     difficulty: Difficulty = Difficulty.BEGINNER,
+    is_offer_or_drop_hand: bool = False,
 ) -> MoveDefinition:
     return MoveDefinition(
         label=label,
         is_lead_turn=is_lead_turn,
         is_follow_turn=is_follow_turn,
         difficulty=difficulty,
+        is_offer_or_drop_hand=is_offer_or_drop_hand,
         destination_reference=dest_position,
     )
 
@@ -125,6 +143,7 @@ def _build_all_moves() -> list[Move]:
                 source=position_definition.position,
                 destination=destination,
                 difficulty=move_definition.difficulty,
+                is_offer_or_drop_hand=move_definition.is_offer_or_drop_hand,
                 sub_moves=[
                     SubMove(role=Role.LEAD, is_turn=move_definition.is_lead_turn),
                     SubMove(role=Role.FOLLOW, is_turn=move_definition.is_follow_turn),
@@ -139,6 +158,80 @@ def _build_all_moves() -> list[Move]:
             )
 
     return all_moves
+
+
+def _assign_position_ids() -> None:
+    ordered_positions = [
+        *_sorted_column_positions(
+            [
+                position
+                for position in ALL_POSITIONS
+                if (
+                    position.position_type != PositionType.IMPACT
+                    and position.lead_start_step_foot == Direction.LEFT
+                )
+            ]
+        ),
+        *_sorted_column_positions(
+            [
+                position
+                for position in ALL_POSITIONS
+                if (
+                    position.position_type != PositionType.IMPACT
+                    and position.lead_start_step_foot == Direction.RIGHT
+                )
+            ]
+        ),
+        *_sorted_impact_positions(
+            [position for position in ALL_POSITIONS if position.position_type == PositionType.IMPACT]
+        ),
+    ]
+
+    for index, position in enumerate(ordered_positions, start=1):
+        position.position_id = str(index)
+
+
+def _sorted_column_positions(positions: list[Position]) -> list[Position]:
+    return sorted(positions, key=_column_position_sort_key)
+
+
+def _sorted_impact_positions(positions: list[Position]) -> list[Position]:
+    return sorted(
+        positions,
+        key=lambda position: (
+            _POSITION_TYPE_ORDER[position.position_type],
+            _DIRECTION_ORDER[position.lead_start_step_foot],
+            _hands_joined_sort_key(position),
+            position.label or "",
+        ),
+    )
+
+
+def _column_position_sort_key(position: Position) -> tuple[int, int, int, tuple[int, ...], str]:
+    return (
+        _GROUP_ORDER.get(
+            (position.crossed, len(position.sub_position_for_role(Role.LEAD).hands_joined)),
+            len(_GROUP_ORDER),
+        ),
+        _POSITION_TYPE_ORDER[position.position_type],
+        _single_hand_priority(position),
+        _hands_joined_sort_key(position),
+        position.label or "",
+    )
+
+
+def _single_hand_priority(position: Position) -> int:
+    follow_hands_joined = position.sub_position_for_role(Role.FOLLOW).hands_joined
+    if len(follow_hands_joined) != 1:
+        return 0
+    return 0 if follow_hands_joined[0] == Direction.RIGHT else 1
+
+
+def _hands_joined_sort_key(position: Position) -> tuple[int, ...]:
+    return tuple(
+        _DIRECTION_ORDER[direction]
+        for direction in position.sub_position_for_role(Role.LEAD).hands_joined
+    )
 
 
 # TODO Add all Moves that point back to own state
@@ -180,12 +273,14 @@ FIRST_HALF = create_position(
         ),
         create_move(
             label="Offer Hand + Drop",
+            is_offer_or_drop_hand=True,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_OPPOSITE,
         ),
         create_move(
             label="Offer Hand + Hold",
+            is_offer_or_drop_hand=True,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_BOTH,
@@ -216,12 +311,14 @@ FIRST_HALF_OPPOSITE = create_position(
     moves=[
         create_move(
             label="Offer Hand + Drop",
+            is_offer_or_drop_hand=True,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF,
         ),
         create_move(
             label="Offer Hand + Hold",
+            is_offer_or_drop_hand=True,
             is_lead_turn = False,
             is_follow_turn = False,
             dest_position=lambda: FIRST_HALF_BOTH
@@ -236,7 +333,7 @@ FIRST_HALF_OPPOSITE = create_position(
 )
 
 FIRST_HALF_CATCH = create_position(
-    label="First Half Catch",
+    label="Catch Right Side",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT],
@@ -299,12 +396,26 @@ FIRST_HALF_BOTH = create_position(
             is_follow_turn=False,
             difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE,
+        ),
+        create_move(
+            label="Drop Hand",
+            is_offer_or_drop_hand=True,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF
+        ),
+        create_move(
+            label="Drop Hand",
+            is_offer_or_drop_hand=True,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_OPPOSITE
         )
     ],
 )
 
 FIRST_HALF_BOTH_CUDDLE = create_position(
-    label="First Half Cuddle",
+    label="Cuddle",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
@@ -330,6 +441,12 @@ FIRST_HALF_BOTH_CUDDLE = create_position(
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_BOTH,
+        ),
+        create_move(
+            label="Cuddle Lean",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_BOTH_CUDDLE
         )
     ],
 )
@@ -355,21 +472,14 @@ FIRST_HALF_CROSSED = create_position(
             dest_position=lambda: SECOND_HALF_CROSSED,
         ),
         create_move(
-            label="Lasso Into Outside Turn",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            difficulty=Difficulty.INTERMEDIATE,
-            dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE,
-        ),
-        create_move(
-            label="Lasso Into Shoulder Lean",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            difficulty=Difficulty.INTERMEDIATE,
-            dest_position=lambda: SECOND_HALF_SHOULDER_LEAN,
+            label="Reverse Sweetheart Left",
+            is_lead_turn=True,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT
         ),
         create_move(
             label="Offer Hand + Drop",
+            is_offer_or_drop_hand=True,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE,
@@ -393,12 +503,14 @@ FIRST_HALF_CROSSED_OPPOSITE = create_position(
         ),
         create_move(
             label="Offer Hand + Drop",
+            is_offer_or_drop_hand=True,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_CROSSED,
         ),
         create_move(
             label="Offer Hand + Hold",
+            is_offer_or_drop_hand=True,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
@@ -414,7 +526,7 @@ FIRST_HALF_CROSSED_OPPOSITE = create_position(
             is_lead_turn=False,
             is_follow_turn=True,
             difficulty=Difficulty.INTERMEDIATE,
-            dest_position=lambda: SECOND_HALF_SHOULDER_LEAN
+            dest_position=lambda: FIRST_HALF_SHOULDER_LEAN_LEFT
         )
     ],
 )
@@ -444,8 +556,52 @@ FIRST_HALF_CROSSED_BOTH = create_position(
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_CROSSED_BOTH,
+        ),
+        create_move(
+            label="Drop Hand",
+            is_offer_or_drop_hand=True,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED
+        ),
+        create_move(
+            label="Drop Hand",
+            is_offer_or_drop_hand=True,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE
         )
     ],
+)
+
+FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT = create_position(
+    label="Reverse Sweetheart Left",
+    lead_start_step_foot=Direction.LEFT,
+    follow_start_step_foot=Direction.RIGHT,
+    lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
+    follow_hands_joined=[Direction.LEFT, Direction.RIGHT],
+    position_type=PositionType.TWISTED,
+    crossed=True,
+    moves=[
+        create_move(
+            label="Rotate",
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT
+        ),
+        create_move(
+            label="Drop Hand and Lasso",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda:SECOND_HALF_CROSSED_OPPOSITE
+        ),
+        create_move(
+            label="Lasso Into Shoulder Lean Left",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_SHOULDER_LEAN_LEFT
+        )
+    ]
 )
 
 
@@ -486,12 +642,14 @@ SECOND_HALF = create_position(
         ),
         create_move(
             label="Offer Hand + Drop",
+            is_offer_or_drop_hand=True,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_OPPOSITE,
         ),
         create_move(
             label="Offer Hand + Hold",
+            is_offer_or_drop_hand=True,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_BOTH
@@ -514,12 +672,14 @@ SECOND_HALF_OPPOSITE = create_position(
     moves=[
         create_move(
             label="Offer Hand + Drop",
+            is_offer_or_drop_hand=True,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF,
         ),
         create_move(
             label="Offer Hand + Hold",
+            is_offer_or_drop_hand=True,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_BOTH,
@@ -541,13 +701,19 @@ SECOND_HALF_OPPOSITE = create_position(
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_OPPOSITE,
+        ),
+        create_move(
+            label="J Hook Into Cuddle",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=FIRST_HALF_BOTH_CUDDLE
         )
     ],
 )
 
 
 SECOND_HALF_CATCH = create_position(
-    label="Second Half Catch",
+    label="Catch\nLeft Side",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT],
@@ -603,6 +769,20 @@ SECOND_HALF_BOTH = create_position(
             is_follow_turn=False,
             difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE,
+        ),
+        create_move(
+            label="Drop Hand",
+            is_offer_or_drop_hand=True,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF
+        ),
+        create_move(
+            label="Drop Hand",
+            is_offer_or_drop_hand=True,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_OPPOSITE
         )
     ],
 )
@@ -632,7 +812,7 @@ SECOND_HALF_BOTH_TWISTED = create_position(
 )
 
 SECOND_HALF_BOTH_HAMMERLOCK = create_position(
-    label="Second Half Hammerlock",
+    label="Hammer Lock",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
@@ -684,15 +864,30 @@ SECOND_HALF_CROSSED = create_position(
         ),
         create_move(
             label="Offer Hand + Drop",
+            is_offer_or_drop_hand=True,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE,
         ),
         create_move(
             label="Offer Hand + Hold",
+            is_offer_or_drop_hand=True,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_CROSSED_BOTH,
+        ),
+        create_move(
+            label="S Dip",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            difficulty=Difficulty.INTERMEDIATE,
+            dest_position=lambda: FIRST_HALF_S_DIP
+        ),
+        create_move(
+            label="Shoulder Lean",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_SHOULDER_LEAN_RIGHT
         )
     ],
 )
@@ -719,6 +914,7 @@ SECOND_HALF_CROSSED_OPPOSITE = create_position(
         ),
         create_move(
             label="Offer Hand + Drop",
+            is_offer_or_drop_hand=True,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_CROSSED,
@@ -728,6 +924,12 @@ SECOND_HALF_CROSSED_OPPOSITE = create_position(
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE,
+        ),
+        create_move(
+            label="Reverse Sweetheart Right",
+            is_lead_turn=True,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT
         )
     ],
 )
@@ -759,19 +961,56 @@ SECOND_HALF_CROSSED_BOTH = create_position(
             dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
         ),
         create_move(
-            label="S Dip",
+            label="Drop Hand",
+            is_offer_or_drop_hand=True,
             is_lead_turn=False,
-            is_follow_turn=True,
-            difficulty=Difficulty.INTERMEDIATE,
-            dest_position=lambda: FIRST_HALF_S_DIP
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED
+        ),
+        create_move(
+            label="Drop Hand",
+            is_offer_or_drop_hand=True,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE
         )
     ],
+)
+
+SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT = create_position(
+    label="Reverse Sweetheart Right",
+    lead_start_step_foot=Direction.RIGHT,
+    follow_start_step_foot=Direction.LEFT,
+    lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
+    follow_hands_joined=[Direction.LEFT, Direction.RIGHT],
+    position_type=PositionType.TWISTED,
+    crossed=True,
+    moves=[
+        create_move(
+            label="Rotate",
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT
+        ),
+        create_move(
+            label="Drop Hand and Lasso",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda:FIRST_HALF_CROSSED
+        ),
+        create_move(
+            label="Lasso Into Shoulder Lean Right",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_SHOULDER_LEAN_RIGHT
+        )
+    ]
 )
 
 
 # Impact / One-Off Positions
 FIRST_HALF_DIP = create_position(
-    label="Entering Left Dip",
+    label="Basic Dip",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[],
@@ -788,7 +1027,7 @@ FIRST_HALF_DIP = create_position(
 )
 
 FIRST_HALF_S_DIP = create_position(
-    label="Entering Left S Dip",
+    label="S Dip",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.RIGHT],
@@ -806,7 +1045,7 @@ FIRST_HALF_S_DIP = create_position(
 )
 
 FIRST_HALF_TRUST_FALL = create_position(
-    label="Entering Trust Fall",
+    label="Trust Fall",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[],
@@ -824,10 +1063,10 @@ FIRST_HALF_TRUST_FALL = create_position(
     ],
 )
 
-SECOND_HALF_SHOULDER_LEAN = create_position(
-    label="Entering Shoulder Lean",
+FIRST_HALF_SHOULDER_LEAN_LEFT = create_position(
+    label="Shoulder Lean Left",
     lead_start_step_foot=Direction.LEFT,
-    follow_start_step_foot=Direction.RIGHT,
+    follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.LEFT],
     position_type=PositionType.IMPACT,
@@ -844,6 +1083,35 @@ SECOND_HALF_SHOULDER_LEAN = create_position(
     ],
 )
 
+SECOND_HALF_SHOULDER_LEAN_RIGHT = create_position(
+    label="Shoulder Lean Right",
+    lead_start_step_foot=Direction.RIGHT,
+    follow_start_step_foot=Direction.RIGHT,
+    lead_hands_joined=[Direction.RIGHT],
+    follow_hands_joined=[Direction.RIGHT],
+    position_type=PositionType.IMPACT,
+    difficulty=Difficulty.INTERMEDIATE,
+    moves=[
+        create_move(
+            label="Lean and Arm Slide",
+            is_lead_turn=False,
+            is_follow_turn=False,
+            difficulty=Difficulty.INTERMEDIATE,
+            dest_position=lambda: FIRST_HALF,
+        ),
+        # TODO consider a move that uses connected lead left/follow left
+    ],
+)
+
 
 ALL_POSITIONS: list[Position] = [definition.position for definition in _POSITION_DEFINITIONS]
 ALL_MOVES = _build_all_moves()
+_assign_position_ids()
+
+# TODOs
+# Figure out getting into Shoulder Lean Left
+# Maybe add Shoulder Lean Right?
+# Add outgoing/incoming states to Reverse Sweetheart, Sweetheart (trust fall)
+# Make Twisted an actual diagram
+# Add Move types, to be able to categorize drops/offers as those for the checkbox?
+# Add Practice Mode - uses visible states/moves, once a starting state is chosen, hit Play button. Slider determines speed. Pause and Stop buttons. Reads out move and pings 3 times in preparation for next move
