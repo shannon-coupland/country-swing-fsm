@@ -410,6 +410,12 @@ FIRST_HALF_BOTH = create_position(
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_OPPOSITE
+        ),
+        create_move(
+            label="Basic Check Left",
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_BOTH
         )
     ],
 )
@@ -445,7 +451,13 @@ FIRST_HALF_BOTH_CUDDLE = create_position(
         create_move(
             label="Cuddle Lean",
             is_lead_turn=False,
-            is_follow_turn=True,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_BOTH_CUDDLE
+        ),
+        create_move(
+            label="Rotate",
+            is_lead_turn=False,
+            is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_BOTH_CUDDLE
         )
     ],
@@ -555,6 +567,12 @@ FIRST_HALF_CROSSED_BOTH = create_position(
             label="Spinneroo (Step to Left)",
             is_lead_turn=False,
             is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_CROSSED_BOTH,
+        ),
+        create_move(
+            label="Duck Under Spinneroo (Turn to Left)",
+            is_lead_turn=True,
+            is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_CROSSED_BOTH,
         ),
         create_move(
@@ -789,6 +807,12 @@ SECOND_HALF_BOTH = create_position(
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_OPPOSITE
+        ),
+        create_move(
+            label="Basic Check Right",
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_BOTH
         )
     ],
 )
@@ -838,6 +862,18 @@ SECOND_HALF_BOTH_HAMMERLOCK = create_position(
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_BOTH
+        ),
+        create_move(
+            label="Duck Under Rotate",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK
+        ),
+        create_move(
+            label="Duck Under Peek",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK
         )
     ],
 )
@@ -903,11 +939,7 @@ SECOND_HALF_CROSSED = create_position(
     ],
 )
 
-# TODO WHAT MATTERS FOR INSIDE VS OUTSIDE TURN: 
-# If the hand being held during the turn is the same hand as the direction turning, then outside. 
-# If hand being held is the opposite from direction turning, then inside
-# TODO add inside vs. outside turn calculated properties for SubMove, but to the Move, add an optional "offered_hand" property that supersedes hand of source state
-# If no offered_hand, then use hand of source state. If both hands joined on source state, ...?
+
 
 SECOND_HALF_CROSSED_OPPOSITE = create_position(
     lead_start_step_foot=Direction.RIGHT,
@@ -969,6 +1001,11 @@ SECOND_HALF_CROSSED_BOTH = create_position(
             label="Spinneroo (Step to Right)",
             is_lead_turn=False,
             is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
+        ),create_move(
+            label="Duck Under Spinneroo (Turn to Right)",
+            is_lead_turn=True,
+            is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
         ),
         create_move(
@@ -1096,7 +1133,12 @@ FIRST_HALF_SHOULDER_LEAN_LEFT = create_position(
             difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: SECOND_HALF_OPPOSITE,
         ),
-        # TODO consider a move that uses connected lead left/follow left
+        create_move(
+            label="Turn with Shoulder Hand",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE
+        )
     ],
 )
 
@@ -1116,7 +1158,12 @@ SECOND_HALF_SHOULDER_LEAN_RIGHT = create_position(
             difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: FIRST_HALF,
         ),
-        # TODO consider a move that uses connected lead left/follow left
+        create_move(
+            label="Turn with Shoulder Hand",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_CROSSED
+        )
     ],
 )
 
@@ -1126,4 +1173,12 @@ ALL_MOVES = _build_all_moves()
 _assign_position_ids()
 
 # TODOs
+# Clean up move naming
 # Add Practice Mode - uses visible states/moves, once a starting state is chosen, hit Play button. Slider determines speed. Pause and Stop buttons. Reads out move and pings 3 times in preparation for next move
+# Add side panel - selected Position includes position info and table of outgoing move information (include outside turn). Selected Move has move information, including source, destination, inside vs outside turn
+#  
+# WHAT MATTERS FOR INSIDE VS OUTSIDE TURN: 
+# If the hand being held during the turn is the same hand as the direction turning, then outside. 
+# If hand being held is the opposite from direction turning, then inside
+# add inside vs. outside turn calculated properties for SubMove, but to the Move, add an optional "offered_hand" property that supersedes hand of source state
+# If no offered_hand, then use hand of source state. If both hands joined on source state, ...?
