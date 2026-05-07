@@ -66,6 +66,7 @@ POSITION_ID_OFFSET = -18.0
 POSITION_ID_TEXT_SIZE = 22.0
 POSITION_LABEL_TEXT_SIZE = 12.0
 MOVE_LABEL_TEXT_SIZE = 11.0
+TWISTED_CONNECTION_CROSSBAR_WIDTH = 28.0
 
 GROUP_ORDER = {
     (False, 1): 0,
@@ -689,8 +690,8 @@ def _add_position_node(
 
     items: list[QGraphicsItem] = [circle]
     items.append(_add_position_id_label(scene, position, center, outline_color, position_key))
-    if position.position_type == PositionType.NORMAL:
-        items.extend(_add_normal_position_diagram(scene, position, center, display_role, position_key))
+    if position.position_type == PositionType.NORMAL or position.label is None:
+        items.extend(_add_position_diagram(scene, position, center, display_role, position_key))
         return items
 
     label = _display_position_label(position, display_role)
@@ -713,7 +714,7 @@ def _add_position_node(
     return items
 
 
-def _add_normal_position_diagram(
+def _add_position_diagram(
     scene: QGraphicsScene,
     position: Position,
     center: QPointF,
@@ -774,6 +775,37 @@ def _add_hand_connection_items(
     if hand_count == 0:
         return []
 
+    if position.position_type == PositionType.TWISTED and position.label is None and hand_count == 2:
+        items = _add_standard_hand_connection_items(
+            scene,
+            position,
+            centers_by_role,
+            display_role,
+            position_key,
+        )
+        items.extend(_add_twisted_crossbar_items(scene, centers_by_role, position_key))
+        return items
+
+    return _add_standard_hand_connection_items(
+        scene,
+        position,
+        centers_by_role,
+        display_role,
+        position_key,
+    )
+
+
+def _add_standard_hand_connection_items(
+    scene: QGraphicsScene,
+    position: Position,
+    centers_by_role: dict[Role, QPointF],
+    display_role: Role,
+    position_key: str,
+) -> list[QGraphicsItem]:
+    lead_hands = position.sub_position_for_role(Role.LEAD).hands_joined
+    follow_sub_position = position.sub_position_for_role(Role.FOLLOW)
+    follow_hands = follow_sub_position.hands_joined
+    hand_count = len(lead_hands)
     outline_pen = QPen(DIAGRAM_LINE_OUTLINE_COLOR, CONNECTION_OUTLINE_PEN_WIDTH)
     pen = QPen(DIAGRAM_LINE_COLOR, CONNECTION_PEN_WIDTH)
     connection_specs: list[tuple[Direction, QPointF, QPointF]] = []
@@ -822,6 +854,44 @@ def _add_hand_connection_items(
         _set_item_focus_data(line_item, "position", position_key)
         items.append(line_item)
     return items
+
+
+def _add_twisted_crossbar_items(
+    scene: QGraphicsScene,
+    centers_by_role: dict[Role, QPointF],
+    position_key: str,
+) -> list[QGraphicsItem]:
+    swirl_center = QPointF(
+        (centers_by_role[Role.LEAD].x() + centers_by_role[Role.FOLLOW].x()) / 2.0,
+        (centers_by_role[Role.LEAD].y() + centers_by_role[Role.FOLLOW].y()) / 2.0,
+    )
+    outline_pen = QPen(DIAGRAM_LINE_OUTLINE_COLOR, CONNECTION_OUTLINE_PEN_WIDTH)
+    pen = QPen(DIAGRAM_LINE_COLOR, CONNECTION_PEN_WIDTH)
+    start = QPointF(
+        swirl_center.x() - (TWISTED_CONNECTION_CROSSBAR_WIDTH / 2.0),
+        swirl_center.y(),
+    )
+    end = QPointF(
+        swirl_center.x() + (TWISTED_CONNECTION_CROSSBAR_WIDTH / 2.0),
+        swirl_center.y(),
+    )
+    outline_item = scene.addLine(
+        start.x(),
+        start.y(),
+        end.x(),
+        end.y(),
+        outline_pen,
+    )
+    _set_item_focus_data(outline_item, "position", position_key)
+    line_item = scene.addLine(
+        start.x(),
+        start.y(),
+        end.x(),
+        end.y(),
+        pen,
+    )
+    _set_item_focus_data(line_item, "position", position_key)
+    return [outline_item, line_item]
 
 
 def _add_role_circle_items(

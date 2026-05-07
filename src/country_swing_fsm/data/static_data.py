@@ -600,6 +600,12 @@ FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT = create_position(
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_SHOULDER_LEAN_LEFT
+        ),
+        create_move(
+            label="Pull to Right",
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT
         )
     ]
 )
@@ -788,7 +794,6 @@ SECOND_HALF_BOTH = create_position(
 )
 
 SECOND_HALF_BOTH_TWISTED = create_position(
-    label="Twisted",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
@@ -827,6 +832,12 @@ SECOND_HALF_BOTH_HAMMERLOCK = create_position(
             is_follow_turn=False,
             difficulty=Difficulty.INTERMEDIATE,
             dest_position=lambda: FIRST_HALF_OPPOSITE,
+        ),
+        create_move(
+            label="Unwind",
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_BOTH
         )
     ],
 )
@@ -1003,6 +1014,12 @@ SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT = create_position(
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_SHOULDER_LEAN_RIGHT
+        ),
+        create_move(
+            label="Pull to Left",
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT
         )
     ]
 )
@@ -1109,9 +1126,4 @@ ALL_MOVES = _build_all_moves()
 _assign_position_ids()
 
 # TODOs
-# Figure out getting into Shoulder Lean Left
-# Maybe add Shoulder Lean Right?
-# Add outgoing/incoming states to Reverse Sweetheart, Sweetheart (trust fall)
-# Make Twisted an actual diagram
-# Add Move types, to be able to categorize drops/offers as those for the checkbox?
 # Add Practice Mode - uses visible states/moves, once a starting state is chosen, hit Play button. Slider determines speed. Pause and Stop buttons. Reads out move and pings 3 times in preparation for next move
