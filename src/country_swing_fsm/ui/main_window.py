@@ -1502,6 +1502,24 @@ def _apply_focus_state(
                 _position_option_key(move.source) for move in visible_incoming_moves
             )
             highlighted_move_keys.update(_move_group_key(move) for move in visible_incoming_moves)
+            if offer_hand_passthrough:
+                direct_incoming_source_ids = {
+                    id(incoming_move.source) for incoming_move in visible_incoming_moves
+                }
+                passthrough_incoming_moves = [
+                    move
+                    for move in moves_by_key.values()
+                    if (
+                        id(move.destination) in direct_incoming_source_ids
+                        and move.move_type == MoveType.OFFER_OR_DROP
+                    )
+                ]
+                highlighted_position_keys.update(
+                    _position_option_key(move.source) for move in passthrough_incoming_moves
+                )
+                highlighted_move_keys.update(
+                    _move_group_key(move) for move in passthrough_incoming_moves
+                )
     elif selection_kind == "move" and selection_key in moves_by_key:
         selected_position_key = None
         selected_move = moves_by_key[selection_key]

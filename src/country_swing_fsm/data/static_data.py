@@ -424,6 +424,20 @@ FIRST_HALF_BOTH = create_position(
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_BOTH
+        ),
+        create_move(
+            label="Pretzel First Half (lead under left, turn follow with left)",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_BOTH_BACK_TO_BACK
+        ),
+        create_move(
+            label="Full Pretzel",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_BOTH
         )
     ],
 )
@@ -473,6 +487,25 @@ FIRST_HALF_BOTH_CUDDLE = create_position(
             dest_position=lambda: FIRST_HALF_BOTH_CUDDLE
         )
     ],
+)
+
+FIRST_HALF_BOTH_BACK_TO_BACK = create_position(
+    label="Back to Back Left",
+    lead_start_step_foot=Direction.LEFT,
+    follow_start_step_foot=Direction.RIGHT,
+    lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
+    follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
+    position_type=PositionType.TWISTED,
+    crossed=False,
+    moves=[
+        create_move(
+            label="Pretzel Second Half (follow under right, lead turns under left)",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_BOTH
+        )
+    ]
 )
 
 FIRST_HALF_CROSSED = create_position(
@@ -854,6 +887,20 @@ SECOND_HALF_BOTH = create_position(
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_BOTH
+        ),
+        create_move(
+            label="Pretzel First Half (lead under right, turn follow with right)",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_BOTH_BACK_TO_BACK
+        ),
+        create_move(
+            label="Full Pretzel",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_BOTH
         )
     ],
 )
@@ -921,6 +968,25 @@ SECOND_HALF_BOTH_HAMMERLOCK = create_position(
             dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK
         )
     ],
+)
+
+SECOND_HALF_BOTH_BACK_TO_BACK = create_position(
+    label="Back to Back Right",
+    lead_start_step_foot=Direction.RIGHT,
+    follow_start_step_foot=Direction.LEFT,
+    lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
+    follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
+    position_type=PositionType.TWISTED,
+    crossed=False,
+    moves=[
+        create_move(
+            label="Pretzel Second Half (follow under left, lead turns under right)",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_BOTH
+        )
+    ]
 )
 
 SECOND_HALF_CROSSED = create_position(
