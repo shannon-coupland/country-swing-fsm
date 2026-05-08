@@ -75,9 +75,9 @@ GROUP_ORDER = {
     (True, 2): 3,
 }
 POSITION_TYPE_ORDER = {
-    PositionType.NORMAL: 0,
+    PositionType.OPEN: 0,
     PositionType.TWISTED: 1,
-    PositionType.IMPACT: 2,
+    PositionType.ACCENT: 2,
 }
 DIRECTION_ORDER = {
     Direction.LEFT: 0,
@@ -290,7 +290,7 @@ class MainWindow(QMainWindow):
                 [
                     position
                     for position in sorted_positions
-                    if position.position_type != PositionType.IMPACT and not position.crossed
+                    if position.position_type != PositionType.ACCENT and not position.crossed
                 ],
             ),
             (
@@ -298,12 +298,12 @@ class MainWindow(QMainWindow):
                 [
                     position
                     for position in sorted_positions
-                    if position.position_type != PositionType.IMPACT and position.crossed
+                    if position.position_type != PositionType.ACCENT and position.crossed
                 ],
             ),
             (
-                "Impact",
-                [position for position in sorted_positions if position.position_type == PositionType.IMPACT],
+                "Accent",
+                [position for position in sorted_positions if position.position_type == PositionType.ACCENT],
             ),
         ]
 
@@ -461,7 +461,7 @@ class MainWindow(QMainWindow):
                 position
                 for position in self.all_positions
                 if (
-                    position.position_type != PositionType.IMPACT
+                    position.position_type != PositionType.ACCENT
                     and position.lead_start_step_foot == Direction.LEFT
                 )
             ]
@@ -471,13 +471,13 @@ class MainWindow(QMainWindow):
                 position
                 for position in self.all_positions
                 if (
-                    position.position_type != PositionType.IMPACT
+                    position.position_type != PositionType.ACCENT
                     and position.lead_start_step_foot == Direction.RIGHT
                 )
             ]
         )
         impact_positions = _sorted_impact_positions(
-            [position for position in self.all_positions if position.position_type == PositionType.IMPACT]
+            [position for position in self.all_positions if position.position_type == PositionType.ACCENT]
         )
         return [*left_positions, *right_positions, *impact_positions]
 
@@ -686,7 +686,7 @@ def build_scene(
             position
             for position in positions
             if (
-                position.position_type != PositionType.IMPACT
+                position.position_type != PositionType.ACCENT
                 and position.lead_start_step_foot == Direction.LEFT
             )
         ]
@@ -696,13 +696,13 @@ def build_scene(
             position
             for position in positions
             if (
-                position.position_type != PositionType.IMPACT
+                position.position_type != PositionType.ACCENT
                 and position.lead_start_step_foot == Direction.RIGHT
             )
         ]
     )
     impact_positions = _sorted_impact_positions(
-        [position for position in positions if position.position_type == PositionType.IMPACT]
+        [position for position in positions if position.position_type == PositionType.ACCENT]
     )
     impact_row_width = (max(len(impact_positions) - 1, 0)) * IMPACT_SPACING
     right_column_x = max(
@@ -917,7 +917,7 @@ def _add_position_node(
 
     items: list[QGraphicsItem] = [circle]
     items.append(_add_position_id_label(scene, position, center, outline_color, position_key))
-    if position.position_type == PositionType.NORMAL or position.label is None:
+    if position.position_type == PositionType.OPEN or position.label is None:
         items.extend(_add_position_diagram(scene, position, center, display_role, position_key))
         return items
 
@@ -1274,7 +1274,7 @@ def _add_move_edge(
     label: str,
     move_key: str,
 ) -> list[QGraphicsItem]:
-    if move.source.position_type == PositionType.IMPACT:
+    if move.source.position_type == PositionType.ACCENT:
         color = IMPACT_COLOR
     else:
         color = LEFT_COLOR if move.source.lead_start_step_foot == Direction.LEFT else RIGHT_COLOR
@@ -1369,7 +1369,7 @@ def _edge_routing(
 
 
 def _position_side(position: Position) -> str:
-    if position.position_type == PositionType.IMPACT:
+    if position.position_type == PositionType.ACCENT:
         return "impact"
     if position.lead_start_step_foot == Direction.LEFT:
         return "left"
@@ -1543,3 +1543,4 @@ def _selection_for_item(item: QGraphicsItem | None) -> tuple[str, str] | None:
             return str(selection_kind), str(selection_key)
         current_item = current_item.parentItem()
     return None
+

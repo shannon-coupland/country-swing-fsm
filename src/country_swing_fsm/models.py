@@ -17,7 +17,7 @@ class Position:
     position_id: str = ""
     label: str | None = None
     crossed: bool | None = None
-    position_type: PositionType = PositionType.NORMAL
+    position_type: PositionType = PositionType.OPEN
     outgoing_moves: list[OutgoingMove] = field(default_factory=list)
     sub_positions: list[SubPosition] = field(default_factory=list)
 
