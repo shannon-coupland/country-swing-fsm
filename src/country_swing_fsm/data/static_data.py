@@ -248,7 +248,7 @@ FIRST_HALF = create_position(
         ),
         create_move(
             label="Arch",
-            move_type=MoveType.TURN,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=True,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF,
@@ -262,7 +262,7 @@ FIRST_HALF = create_position(
         ),
         create_move(
             label="Push Off Outside Turn",
-            move_type=MoveType.TURN,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF,
@@ -283,7 +283,7 @@ FIRST_HALF = create_position(
         ),
         create_move(
             label="Rainbow Outside Turn(s)",
-            move_type=MoveType.TURN,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_CROSSED,
@@ -346,14 +346,14 @@ FIRST_HALF_CATCH = create_position(
         ),
         create_move(
             label="Fishtail",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_CATCH,
         ),
         create_move(
             label="Pull Into Duck Turn",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=-True,
             dest_position=lambda: SECOND_HALF_OPPOSITE
@@ -378,14 +378,14 @@ FIRST_HALF_BOTH = create_position(
         ),
         create_move(
             label="Spinneroo (Step to Left)",
-            move_type=MoveType.TURN,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_BOTH_TWISTED,
         ),
         create_move(
             label="Outside Turn (Hammerlock)",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK,
@@ -498,7 +498,7 @@ FIRST_HALF_CROSSED = create_position(
         ),
         create_move(
             label="Reverse Sweetheart Left",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=True,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT
@@ -522,7 +522,7 @@ FIRST_HALF_CROSSED_OPPOSITE = create_position(
     moves=[
         create_move(
             label="Hairbrush",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.CROSSED_ESCAPE,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF,
@@ -568,28 +568,28 @@ FIRST_HALF_CROSSED_BOTH = create_position(
     moves=[
         create_move(
             label="Hairbrush",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.CROSSED_ESCAPE,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_BOTH,
         ),
         create_move(
             label="Sunrise",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.CROSSED_ESCAPE,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_BOTH,
         ),
         create_move(
             label="Spinneroo (Step to Left)",
-            move_type=MoveType.TURN,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_CROSSED_BOTH,
         ),
         create_move(
             label="Duck Under Spinneroo (Turn to Left)",
-            move_type=MoveType.TURN,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=True,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_CROSSED_BOTH,
@@ -629,7 +629,7 @@ FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT = create_position(
         ),
         create_move(
             label="Drop Right Hand and Lasso",
-            move_type=MoveType.TURN,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda:SECOND_HALF_CROSSED_OPPOSITE
@@ -677,14 +677,14 @@ SECOND_HALF = create_position(
         ),
         create_move(
             label="Right Shoulder Duck",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF,
         ),
         create_move(
             label="Stop at Left Shoulder",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_CATCH,
@@ -736,7 +736,7 @@ SECOND_HALF_OPPOSITE = create_position(
         ),
         create_move(
             label="J Hook Reset",
-            move_type=MoveType.TURN,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF,
@@ -757,7 +757,7 @@ SECOND_HALF_OPPOSITE = create_position(
         ),
         create_move(
             label="J Hook Into Cuddle",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_BOTH_CUDDLE
@@ -783,7 +783,7 @@ SECOND_HALF_CATCH = create_position(
     moves=[
         create_move(
             label="Fishtail",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_CATCH
@@ -868,14 +868,14 @@ SECOND_HALF_BOTH_TWISTED = create_position(
     moves=[
         create_move(
             label="Hairbrush",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.CROSSED_ESCAPE,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_BOTH,
         ),
         create_move(
             label="Spinneroo (Step to Right)",
-            move_type=MoveType.TURN,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_BOTH,
@@ -932,14 +932,14 @@ SECOND_HALF_CROSSED = create_position(
     moves=[
         create_move(
             label="Inside Turn(s) - Put Hand in Left",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.CROSSED_ESCAPE,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF,
         ),
         create_move(
             label="J Hook Reset",
-            move_type=MoveType.TURN,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF,
@@ -998,7 +998,7 @@ SECOND_HALF_CROSSED_OPPOSITE = create_position(
     moves=[
         create_move(
             label="Hairbrush",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.CROSSED_ESCAPE,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF,
@@ -1019,7 +1019,7 @@ SECOND_HALF_CROSSED_OPPOSITE = create_position(
         ),
         create_move(
             label="Reverse Sweetheart Right",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=True,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT
@@ -1037,27 +1037,27 @@ SECOND_HALF_CROSSED_BOTH = create_position(
     moves=[
         create_move(
             label="Hairbrush",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.CROSSED_ESCAPE,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_BOTH,
         ),
         create_move(
             label="Sunrise",
-            move_type=MoveType.OTHER,
+            move_type=MoveType.CROSSED_ESCAPE,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_BOTH,
         ),
         create_move(
             label="Spinneroo (Step to Right)",
-            move_type=MoveType.TURN,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
         ),create_move(
             label="Duck Under Spinneroo (Turn to Right)",
-            move_type=MoveType.TURN,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=True,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
@@ -1097,7 +1097,7 @@ SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT = create_position(
         ),
         create_move(
             label="Drop Left Hand and Lasso",
-            move_type=MoveType.TURN,
+            move_type=MoveType.SPICY_TURN,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda:FIRST_HALF_CROSSED
@@ -1231,17 +1231,10 @@ ALL_MOVES = _build_all_moves()
 _assign_position_ids()
 
 # TODOs
-# Clean up move naming
-
-# Consider adding move types - 
-# drop/offer (if bool supplied),
-# turn (if src and dest both non impact and goes from one half to the other??),
-# rotate (),
-# impact (if dest is impact),
-# other (default)
-
+# Clean up move naming? labels dependent on turn direction if not supplied?
+# Add move type filter
+# Add spicy turns type
 # Consider adding move duration - shortest path
-# Consider adding lead spinneroo
 # Consider replacing big move dropdown with right clicking on positions and checking/unchecking moves (or doing that additionally)
 # Try out all moves
 # When 

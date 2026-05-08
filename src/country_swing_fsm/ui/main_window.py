@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt
 from PySide6.QtGui import QAction, QBrush, QColor, QPainter, QPainterPath, QPen, QPolygonF, QTextOption, QTransform
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -91,17 +91,25 @@ class MainWindow(QMainWindow):
         self.position_button: QToolButton | None = None
         self.moves_button: QToolButton | None = None
         self.position_actions_by_key: dict[str, QAction] = {}
-        self.move_actions_by_key: dict[str, QAction] = {}
-        self.move_section_labels_by_position_key: dict[str, QLabel] = {}
+        self.move_type_actions_by_type: dict[MoveType, QAction] = {}
         self.show_all_positions_action: QAction | None = None
         self.show_no_positions_action: QAction | None = None
         self.show_all_moves_action: QAction | None = None
         self.show_no_moves_action: QAction | None = None
+        self._position_menu: QMenu | None = None
         self.position_lookup_by_key: dict[str, Position] = {
             _position_option_key(position): position for position in self.all_positions
         }
         self.move_lookup_by_key: dict[str, Move] = {
             _move_option_key(move): move for move in self.all_moves
+        }
+        self.move_keys_by_type: dict[MoveType, set[str]] = {
+            move_type: {
+                move_key
+                for move_key, move in self.move_lookup_by_key.items()
+                if move.move_type == move_type
+            }
+            for move_type in MoveType
         }
         self.visible_position_keys: set[str] = set(self.position_lookup_by_key)
         self.visible_move_keys: set[str] = set(self.move_lookup_by_key)
@@ -253,27 +261,21 @@ class MainWindow(QMainWindow):
         self.show_no_moves_action.triggered.connect(self._show_no_moves)
         menu.addAction(self.show_no_moves_action)
 
-        for position in self._sorted_position_selector_positions():
-            position_key = _position_option_key(position)
-            self.move_section_labels_by_position_key[position_key] = _add_menu_header(
-                menu,
-                _position_menu_label(position, self.display_role),
-            )
-            for outgoing_move in position.outgoing_moves:
-                move = outgoing_move.outgoing_move
-                move_key = _move_option_key(move)
-                action = QAction(_move_menu_label(move), menu)
-                action.setCheckable(True)
-                action.setChecked(True)
-                action.setData(move_key)
-                action.toggled.connect(
-                    lambda checked, move_key=move_key: self._on_move_visibility_toggled(
-                        move_key,
-                        checked,
-                    )
+        _add_menu_header(menu, "Move Type")
+        for move_type in MoveType:
+            action = QAction(_move_type_menu_label(move_type), menu)
+            action.setCheckable(True)
+            action.setChecked(True)
+            if not self.move_keys_by_type[move_type]:
+                action.setEnabled(False)
+            action.triggered.connect(
+                lambda checked, move_type=move_type: self._on_move_type_visibility_toggled(
+                    move_type,
+                    checked,
                 )
-                menu.addAction(action)
-                self.move_actions_by_key[move_key] = action
+            )
+            menu.addAction(action)
+            self.move_type_actions_by_type[move_type] = action
 
         button.setMenu(menu)
         self.moves_button = button
@@ -323,6 +325,25 @@ class MainWindow(QMainWindow):
         if not self._suppress_refresh:
             self._refresh_scene(preserve_view=True)
 
+    def _on_move_type_visibility_toggled(self, move_type: MoveType, checked: bool) -> None:
+        visible_move_types = {
+            current_move_type
+            for current_move_type, action in self.move_type_actions_by_type.items()
+            if action.isChecked()
+        }
+        if checked:
+            visible_move_types.add(move_type)
+        else:
+            visible_move_types.discard(move_type)
+
+        self.visible_move_keys = {
+            move_key
+            for move_key, move in self.move_lookup_by_key.items()
+            if move.move_type in visible_move_types
+        }
+        self._update_move_selector_label()
+        self._refresh_scene(preserve_view=True)
+
     def _show_all_positions(self) -> None:
         self._suppress_refresh = True
         try:
@@ -350,29 +371,15 @@ class MainWindow(QMainWindow):
         self._refresh_scene(preserve_view=True)
 
     def _show_all_moves(self) -> None:
-        self._suppress_refresh = True
-        try:
-            self.visible_move_keys = set(self.move_lookup_by_key)
-            for action in self.move_actions_by_key.values():
-                if not action.isChecked():
-                    action.setChecked(True)
-            self._update_move_selector_label()
-        finally:
-            self._suppress_refresh = False
-
+        self.visible_move_keys = set(self.move_lookup_by_key)
+        self._sync_move_type_action_states()
+        self._update_move_selector_label()
         self._refresh_scene(preserve_view=True)
 
     def _show_no_moves(self) -> None:
-        self._suppress_refresh = True
-        try:
-            self.visible_move_keys.clear()
-            for action in self.move_actions_by_key.values():
-                if action.isChecked():
-                    action.setChecked(False)
-            self._update_move_selector_label()
-        finally:
-            self._suppress_refresh = False
-
+        self.visible_move_keys.clear()
+        self._sync_move_type_action_states()
+        self._update_move_selector_label()
         self._refresh_scene(preserve_view=True)
 
     def _update_position_selector_label(self) -> None:
@@ -406,11 +413,11 @@ class MainWindow(QMainWindow):
             self.show_all_moves_action.setChecked(visible_count == total_count)
         if self.show_no_moves_action is not None:
             self.show_no_moves_action.setChecked(visible_count == 0)
+        self._sync_move_type_action_states()
 
     def _on_mode_changed(self, value: int) -> None:
         self.display_role = Role.FOLLOW if value == 1 else Role.LEAD
         self._update_position_action_labels()
-        self._update_move_action_labels()
         self._refresh_scene(preserve_view=True)
 
     def _on_offer_hand_passthrough_toggled(self, checked: bool) -> None:
@@ -443,6 +450,7 @@ class MainWindow(QMainWindow):
                 offer_hand_passthrough=self.offer_hand_passthrough,
                 show_incoming_moves=self.show_incoming_moves,
                 on_focus_change=self._on_focus_change,
+                on_position_menu_request=self._show_position_move_menu,
             ),
             preserve_view=preserve_view,
         )
@@ -479,6 +487,35 @@ class MainWindow(QMainWindow):
         self.selected_focus = selected_focus
         self._refresh_scene(preserve_view=True)
 
+    def _show_position_move_menu(self, position_key: str, screen_pos: QPoint) -> None:
+        position = self.position_lookup_by_key.get(position_key)
+        if position is None:
+            return
+
+        menu = PersistentFilterMenu(self)
+        self._position_menu = menu
+        _add_menu_header(menu, _position_menu_label(position, self.display_role))
+        if not position.outgoing_moves:
+            empty_action = QAction("(No outgoing moves)", menu)
+            empty_action.setEnabled(False)
+            menu.addAction(empty_action)
+        else:
+            for outgoing_move in position.outgoing_moves:
+                move = outgoing_move.outgoing_move
+                move_key = _move_option_key(move)
+                action = QAction(_move_menu_label(move), menu)
+                action.setCheckable(True)
+                action.setChecked(move_key in self.visible_move_keys)
+                action.toggled.connect(
+                    lambda checked, move_key=move_key: self._on_move_visibility_toggled(
+                        move_key,
+                        checked,
+                    )
+                )
+                menu.addAction(action)
+        menu.exec(screen_pos)
+        self._position_menu = None
+
     def _update_position_action_labels(self) -> None:
         for position_key, action in self.position_actions_by_key.items():
             action.setText(
@@ -488,16 +525,13 @@ class MainWindow(QMainWindow):
                 )
             )
 
-    def _update_move_action_labels(self) -> None:
-        for position_key, label in self.move_section_labels_by_position_key.items():
-            label.setText(
-                _position_menu_label(
-                    self.position_lookup_by_key[position_key],
-                    self.display_role,
-                )
-            )
-        for move_key, action in self.move_actions_by_key.items():
-            action.setText(_move_menu_label(self.move_lookup_by_key[move_key]))
+    def _sync_move_type_action_states(self) -> None:
+        for move_type, action in self.move_type_actions_by_type.items():
+            move_keys = self.move_keys_by_type[move_type]
+            if not move_keys:
+                action.setChecked(False)
+                continue
+            action.setChecked(move_keys.issubset(self.visible_move_keys))
 
 
 class DiagramView(QGraphicsView):
@@ -589,14 +623,25 @@ class InteractiveScene(QGraphicsScene):
     def __init__(
         self,
         on_focus_change: Callable[[tuple[str, str] | None], None] | None = None,
+        on_position_menu_request: Callable[[str, QPoint], None] | None = None,
     ) -> None:
         super().__init__()
         self._on_focus_change = on_focus_change
+        self._on_position_menu_request = on_position_menu_request
 
     def mousePressEvent(self, event) -> None:
         clicked_item = self.itemAt(event.scenePos(), QTransform())
         selection = _selection_for_item(clicked_item)
-        if self._on_focus_change is not None:
+        if (
+            selection is not None
+            and selection[0] == "position"
+            and self._on_position_menu_request is not None
+            and event.button() == Qt.MouseButton.RightButton
+        ):
+            self._on_position_menu_request(selection[1], event.screenPos())
+            event.accept()
+            return
+        if self._on_focus_change is not None and event.button() == Qt.MouseButton.LeftButton:
             self._on_focus_change(selection)
         super().mousePressEvent(event)
 
@@ -621,8 +666,12 @@ def build_scene(
     offer_hand_passthrough: bool = False,
     show_incoming_moves: bool = False,
     on_focus_change: Callable[[tuple[str, str] | None], None] | None = None,
+    on_position_menu_request: Callable[[str, QPoint], None] | None = None,
 ) -> QGraphicsScene:
-    scene = InteractiveScene(on_focus_change=on_focus_change)
+    scene = InteractiveScene(
+        on_focus_change=on_focus_change,
+        on_position_menu_request=on_position_menu_request,
+    )
     scene.setBackgroundBrush(BACKGROUND_COLOR)
 
     included_positions_by_id = {id(position): position for position in positions}
@@ -1159,6 +1208,12 @@ def _position_menu_label(position: Position, display_role: Role) -> str:
 
 def _move_menu_label(move: Move) -> str:
     return move.label or "(unlabeled)"
+
+
+def _move_type_menu_label(move_type: MoveType) -> str:
+    if move_type == MoveType.OFFER_OR_DROP:
+        return "Offer/Drop"
+    return move_type.value.replace("_", " ").title()
 
 
 def _add_position_id_label(

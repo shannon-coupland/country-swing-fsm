@@ -18,7 +18,9 @@ class PositionType(str, Enum):
 
 
 class MoveType(str, Enum):
-    TURN = "turn"
+    TURN = "turn" # Idea: Basic (includes Basic Check Left / Basic Check Right, Stretch, Cuddle)
+    SPICY_TURN="spicy_turn" # Idea: Spicy (includes Hammerlock, arm slides, reverse sweetheart stuff)
     ROTATE = "rotate"
+    CROSSED_ESCAPE = "crossed_escape"
     OFFER_OR_DROP = "offer_or_drop"
-    OTHER = "other"
+    OTHER = "other" # Idea: Impact
