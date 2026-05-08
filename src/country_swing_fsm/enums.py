@@ -17,7 +17,8 @@ class PositionType(str, Enum):
     IMPACT = "impact"
 
 
-class Difficulty(str, Enum):
-    BEGINNER = "beginner"
-    INTERMEDIATE = "intermediate"
-    ADVANCED = "advanced"
+class MoveType(str, Enum):
+    TURN = "turn"
+    ROTATE = "rotate"
+    OFFER_OR_DROP = "offer_or_drop"
+    OTHER = "other"

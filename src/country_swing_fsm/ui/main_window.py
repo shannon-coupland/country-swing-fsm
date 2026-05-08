@@ -18,14 +18,14 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMenu,
-    QPushButton,
     QSlider,
     QToolButton,
     QVBoxLayout,
     QWidget,
+    QWidgetAction,
 )
 
-from country_swing_fsm.enums import Direction, PositionType, Role
+from country_swing_fsm.enums import Direction, MoveType, PositionType, Role
 from country_swing_fsm.models import Move, Position
 
 
@@ -89,11 +89,22 @@ class MainWindow(QMainWindow):
         self.all_positions = positions
         self.all_moves = moves
         self.position_button: QToolButton | None = None
+        self.moves_button: QToolButton | None = None
         self.position_actions_by_key: dict[str, QAction] = {}
+        self.move_actions_by_key: dict[str, QAction] = {}
+        self.move_section_labels_by_position_key: dict[str, QLabel] = {}
+        self.show_all_positions_action: QAction | None = None
+        self.show_no_positions_action: QAction | None = None
+        self.show_all_moves_action: QAction | None = None
+        self.show_no_moves_action: QAction | None = None
         self.position_lookup_by_key: dict[str, Position] = {
             _position_option_key(position): position for position in self.all_positions
         }
+        self.move_lookup_by_key: dict[str, Move] = {
+            _move_option_key(move): move for move in self.all_moves
+        }
         self.visible_position_keys: set[str] = set(self.position_lookup_by_key)
+        self.visible_move_keys: set[str] = set(self.move_lookup_by_key)
         self.display_role = Role.LEAD
         self.offer_hand_passthrough = False
         self.show_incoming_moves = False
@@ -126,6 +137,11 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(8)
 
+        left_container = QWidget()
+        left_layout = QHBoxLayout(left_container)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
+
         mode_container = QWidget()
         mode_layout = QHBoxLayout(mode_container)
         mode_layout.setContentsMargins(0, 0, 8, 0)
@@ -149,38 +165,32 @@ class MainWindow(QMainWindow):
             f"color: {FOLLOW_DIAGRAM_COLOR.name()}; font-weight: 700;"
         )
         mode_layout.addWidget(follow_mode_label)
-        layout.addWidget(mode_container)
+        left_layout.addWidget(mode_container)
+        left_layout.addStretch(1)
 
         center_container = QWidget()
         center_layout = QHBoxLayout(center_container)
         center_layout.setContentsMargins(0, 0, 0, 0)
         center_layout.setSpacing(8)
         self._add_position_selector_button(center_layout)
-        show_all_positions_button = QPushButton("Show All")
-        show_all_positions_button.clicked.connect(self._show_all_positions)
-        show_all_positions_button.setFlat(True)
-        show_all_positions_button.setStyleSheet(
-            f"QPushButton {{ background-color: {TOP_BAR_COLOR.name()}; border: 1px solid #94a3b8; border-radius: 6px; padding: 4px 10px; color: {TEXT_COLOR.name()}; }}"
-        )
-        center_layout.addWidget(show_all_positions_button)
-        show_no_positions_button = QPushButton("Show None")
-        show_no_positions_button.clicked.connect(self._show_no_positions)
-        show_no_positions_button.setFlat(True)
-        show_no_positions_button.setStyleSheet(
-            f"QPushButton {{ background-color: {TOP_BAR_COLOR.name()}; border: 1px solid #94a3b8; border-radius: 6px; padding: 4px 10px; color: {TEXT_COLOR.name()}; }}"
-        )
-        center_layout.addWidget(show_no_positions_button)
+        self._add_move_selector_button(center_layout)
 
-        layout.addStretch(1)
-        layout.addWidget(center_container)
-        layout.addStretch(1)
+        right_container = QWidget()
+        right_layout = QHBoxLayout(right_container)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(8)
 
+        right_layout.addStretch(1)
         offer_hand_passthrough_checkbox = QCheckBox("Offer/Drop Hand Passthrough")
         offer_hand_passthrough_checkbox.toggled.connect(self._on_offer_hand_passthrough_toggled)
-        layout.addWidget(offer_hand_passthrough_checkbox)
+        right_layout.addWidget(offer_hand_passthrough_checkbox)
         show_incoming_moves_checkbox = QCheckBox("Show Incoming Moves")
         show_incoming_moves_checkbox.toggled.connect(self._on_show_incoming_moves_toggled)
-        layout.addWidget(show_incoming_moves_checkbox)
+        right_layout.addWidget(show_incoming_moves_checkbox)
+
+        layout.addWidget(left_container, 1)
+        layout.addWidget(center_container, 0, Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(right_container, 1)
         return bar
 
     def _add_position_selector_button(self, layout: QHBoxLayout) -> None:
@@ -192,25 +202,108 @@ class MainWindow(QMainWindow):
         )
 
         menu = PersistentFilterMenu(button)
-        for position in self._sorted_position_selector_positions():
-            position_key = _position_option_key(position)
-            action = QAction(_position_menu_label(position, self.display_role), menu)
-            action.setCheckable(True)
-            action.setChecked(True)
-            action.setData(position_key)
-            action.toggled.connect(
-                lambda checked, position_key=position_key: self._on_position_visibility_toggled(
-                    position_key,
-                    checked,
+        _add_menu_header(menu, "Visibility")
+        self.show_all_positions_action = QAction("Show All", menu)
+        self.show_all_positions_action.setCheckable(True)
+        self.show_all_positions_action.triggered.connect(self._show_all_positions)
+        menu.addAction(self.show_all_positions_action)
+        self.show_no_positions_action = QAction("Show None", menu)
+        self.show_no_positions_action.setCheckable(True)
+        self.show_no_positions_action.triggered.connect(self._show_no_positions)
+        menu.addAction(self.show_no_positions_action)
+
+        for section_label, positions in self._position_sections():
+            _add_menu_header(menu, section_label)
+            for position in positions:
+                position_key = _position_option_key(position)
+                action = QAction(_position_menu_label(position, self.display_role), menu)
+                action.setCheckable(True)
+                action.setChecked(True)
+                action.setData(position_key)
+                action.toggled.connect(
+                    lambda checked, position_key=position_key: self._on_position_visibility_toggled(
+                        position_key,
+                        checked,
+                    )
                 )
-            )
-            menu.addAction(action)
-            self.position_actions_by_key[position_key] = action
+                menu.addAction(action)
+                self.position_actions_by_key[position_key] = action
 
         button.setMenu(menu)
         self.position_button = button
         self._update_position_selector_label()
         layout.addWidget(button)
+
+    def _add_move_selector_button(self, layout: QHBoxLayout) -> None:
+        button = QToolButton()
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        button.setAutoRaise(True)
+        button.setStyleSheet(
+            f"QToolButton {{ background-color: {TOP_BAR_COLOR.name()}; border: 1px solid #94a3b8; border-radius: 6px; padding: 4px 10px; color: {TEXT_COLOR.name()}; }}"
+        )
+
+        menu = PersistentFilterMenu(button)
+        _add_menu_header(menu, "Visibility")
+        self.show_all_moves_action = QAction("Show All", menu)
+        self.show_all_moves_action.setCheckable(True)
+        self.show_all_moves_action.triggered.connect(self._show_all_moves)
+        menu.addAction(self.show_all_moves_action)
+        self.show_no_moves_action = QAction("Show None", menu)
+        self.show_no_moves_action.setCheckable(True)
+        self.show_no_moves_action.triggered.connect(self._show_no_moves)
+        menu.addAction(self.show_no_moves_action)
+
+        for position in self._sorted_position_selector_positions():
+            position_key = _position_option_key(position)
+            self.move_section_labels_by_position_key[position_key] = _add_menu_header(
+                menu,
+                _position_menu_label(position, self.display_role),
+            )
+            for outgoing_move in position.outgoing_moves:
+                move = outgoing_move.outgoing_move
+                move_key = _move_option_key(move)
+                action = QAction(_move_menu_label(move), menu)
+                action.setCheckable(True)
+                action.setChecked(True)
+                action.setData(move_key)
+                action.toggled.connect(
+                    lambda checked, move_key=move_key: self._on_move_visibility_toggled(
+                        move_key,
+                        checked,
+                    )
+                )
+                menu.addAction(action)
+                self.move_actions_by_key[move_key] = action
+
+        button.setMenu(menu)
+        self.moves_button = button
+        self._update_move_selector_label()
+        layout.addWidget(button)
+
+    def _position_sections(self) -> list[tuple[str, list[Position]]]:
+        sorted_positions = self._sorted_position_selector_positions()
+        return [
+            (
+                "Uncrossed",
+                [
+                    position
+                    for position in sorted_positions
+                    if position.position_type != PositionType.IMPACT and not position.crossed
+                ],
+            ),
+            (
+                "Crossed",
+                [
+                    position
+                    for position in sorted_positions
+                    if position.position_type != PositionType.IMPACT and position.crossed
+                ],
+            ),
+            (
+                "Impact",
+                [position for position in sorted_positions if position.position_type == PositionType.IMPACT],
+            ),
+        ]
 
     def _on_position_visibility_toggled(self, position_key: str, checked: bool) -> None:
         if checked:
@@ -218,6 +311,15 @@ class MainWindow(QMainWindow):
         else:
             self.visible_position_keys.discard(position_key)
         self._update_position_selector_label()
+        if not self._suppress_refresh:
+            self._refresh_scene(preserve_view=True)
+
+    def _on_move_visibility_toggled(self, move_key: str, checked: bool) -> None:
+        if checked:
+            self.visible_move_keys.add(move_key)
+        else:
+            self.visible_move_keys.discard(move_key)
+        self._update_move_selector_label()
         if not self._suppress_refresh:
             self._refresh_scene(preserve_view=True)
 
@@ -247,6 +349,32 @@ class MainWindow(QMainWindow):
 
         self._refresh_scene(preserve_view=True)
 
+    def _show_all_moves(self) -> None:
+        self._suppress_refresh = True
+        try:
+            self.visible_move_keys = set(self.move_lookup_by_key)
+            for action in self.move_actions_by_key.values():
+                if not action.isChecked():
+                    action.setChecked(True)
+            self._update_move_selector_label()
+        finally:
+            self._suppress_refresh = False
+
+        self._refresh_scene(preserve_view=True)
+
+    def _show_no_moves(self) -> None:
+        self._suppress_refresh = True
+        try:
+            self.visible_move_keys.clear()
+            for action in self.move_actions_by_key.values():
+                if action.isChecked():
+                    action.setChecked(False)
+            self._update_move_selector_label()
+        finally:
+            self._suppress_refresh = False
+
+        self._refresh_scene(preserve_view=True)
+
     def _update_position_selector_label(self) -> None:
         if self.position_button is None:
             return
@@ -258,10 +386,31 @@ class MainWindow(QMainWindow):
         else:
             label = f"Positions ({visible_count})"
         self.position_button.setText(label)
+        if self.show_all_positions_action is not None:
+            self.show_all_positions_action.setChecked(visible_count == total_count)
+        if self.show_no_positions_action is not None:
+            self.show_no_positions_action.setChecked(visible_count == 0)
+
+    def _update_move_selector_label(self) -> None:
+        if self.moves_button is None:
+            return
+
+        total_count = len(self.move_lookup_by_key)
+        visible_count = len(self.visible_move_keys)
+        if visible_count == total_count:
+            label = "Moves"
+        else:
+            label = f"Moves ({visible_count})"
+        self.moves_button.setText(label)
+        if self.show_all_moves_action is not None:
+            self.show_all_moves_action.setChecked(visible_count == total_count)
+        if self.show_no_moves_action is not None:
+            self.show_no_moves_action.setChecked(visible_count == 0)
 
     def _on_mode_changed(self, value: int) -> None:
         self.display_role = Role.FOLLOW if value == 1 else Role.LEAD
         self._update_position_action_labels()
+        self._update_move_action_labels()
         self._refresh_scene(preserve_view=True)
 
     def _on_offer_hand_passthrough_toggled(self, checked: bool) -> None:
@@ -283,7 +432,7 @@ class MainWindow(QMainWindow):
             move
             for move in self.all_moves
             if id(move.source) in visible_position_ids and id(move.destination) in visible_position_ids
-            and (self.offer_hand_passthrough or not move.is_offer_or_drop_hand)
+            and _move_option_key(move) in self.visible_move_keys
         ]
         self.view.load_scene(
             build_scene(
@@ -338,6 +487,17 @@ class MainWindow(QMainWindow):
                     self.display_role,
                 )
             )
+
+    def _update_move_action_labels(self) -> None:
+        for position_key, label in self.move_section_labels_by_position_key.items():
+            label.setText(
+                _position_menu_label(
+                    self.position_lookup_by_key[position_key],
+                    self.display_role,
+                )
+            )
+        for move_key, action in self.move_actions_by_key.items():
+            action.setText(_move_menu_label(self.move_lookup_by_key[move_key]))
 
 
 class DiagramView(QGraphicsView):
@@ -405,6 +565,24 @@ class PersistentFilterMenu(QMenu):
             event.accept()
             return
         super().mouseReleaseEvent(event)
+
+
+def _add_menu_header(menu: QMenu, label: str) -> QLabel:
+    container = QWidget(menu)
+    layout = QVBoxLayout(container)
+    layout.setContentsMargins(10, 8, 10, 4)
+    layout.setSpacing(0)
+
+    header = QLabel(label, container)
+    header.setStyleSheet(
+        f"color: {TEXT_COLOR.name()}; font-weight: 700; font-size: 11px;"
+    )
+    layout.addWidget(header)
+
+    action = QWidgetAction(menu)
+    action.setDefaultWidget(container)
+    menu.addAction(action)
+    return header
 
 
 class InteractiveScene(QGraphicsScene):
@@ -545,7 +723,7 @@ def build_scene(
 
     for sibling_moves in parallel_move_groups.values():
         move = sibling_moves[0]
-        move_key = _move_option_key(move)
+        move_key = _move_group_key(move)
         move_items_by_key[move_key] = _add_move_edge(
             scene=scene,
             move=move,
@@ -559,7 +737,7 @@ def build_scene(
         position_items_by_key=position_items_by_key,
         move_items_by_key=move_items_by_key,
         positions_by_key={_position_option_key(position): position for position in positions},
-        moves_by_key={_move_option_key(move): move for move in filtered_moves},
+        moves_by_key={_move_group_key(move): move for move in filtered_moves},
         selected_focus=selected_focus,
         offer_hand_passthrough=offer_hand_passthrough,
         show_incoming_moves=show_incoming_moves,
@@ -957,9 +1135,14 @@ def _generated_position_label(position: Position, display_role: Role) -> str:
     step_label = f"{sub_position.start_step_foot.value.title()} Step"
     hands_label = _generated_hands_label(sub_position.hands_joined)
     if not sub_position.hands_joined:
-        return f"{step_label} {hands_label}"
-    crossed_label = "Crossed" if position.crossed else "Uncrossed"
-    return f"{step_label} {crossed_label} {hands_label}"
+        label = f"{step_label} {hands_label}"
+    else:
+        crossed_label = "Crossed" if position.crossed else "Uncrossed"
+        label = f"{step_label} {crossed_label} {hands_label}"
+
+    if position.position_type == PositionType.TWISTED:
+        return f"{label} Twisted"
+    return label
 
 
 def _generated_hands_label(hands_joined: list[Direction]) -> str:
@@ -972,6 +1155,10 @@ def _generated_hands_label(hands_joined: list[Direction]) -> str:
 
 def _position_menu_label(position: Position, display_role: Role) -> str:
     return f"{position.position_id} - {_display_position_label(position, display_role)}"
+
+
+def _move_menu_label(move: Move) -> str:
+    return move.label or "(unlabeled)"
 
 
 def _add_position_id_label(
@@ -1008,7 +1195,11 @@ def _position_option_key(position: Position) -> str:
 
 
 def _move_option_key(move: Move) -> str:
-    return f"move:{id(move.source)}:{id(move.destination)}"
+    return f"move:{id(move)}"
+
+
+def _move_group_key(move: Move) -> str:
+    return f"move-group:{id(move.source)}:{id(move.destination)}"
 
 
 def _position_fill_color(position: Position) -> QColor:
@@ -1210,25 +1401,31 @@ def _apply_focus_state(
 
     selection_kind, selection_key = selected_focus
     if selection_kind == "position" and selection_key in positions_by_key:
+        selected_position_key = selection_key
         selected_position = positions_by_key[selection_key]
         visible_outgoing_moves = [
             move
             for move in moves_by_key.values()
             if move.source is selected_position
         ]
+        directly_highlighted_moves = [
+            move
+            for move in visible_outgoing_moves
+            if offer_hand_passthrough or move.move_type != MoveType.OFFER_OR_DROP
+        ]
         highlighted_position_keys = {
             selection_key,
-            *(_position_option_key(move.destination) for move in visible_outgoing_moves),
+            *(_position_option_key(move.destination) for move in directly_highlighted_moves),
         }
         highlighted_move_keys = {
-            _move_option_key(move)
-            for move in visible_outgoing_moves
+            _move_group_key(move)
+            for move in directly_highlighted_moves
         }
         if offer_hand_passthrough:
             passthrough_positions = [
                 move.destination
                 for move in visible_outgoing_moves
-                if move.is_offer_or_drop_hand
+                if move.move_type == MoveType.OFFER_OR_DROP
             ]
             passthrough_moves = [
                 move
@@ -1238,18 +1435,20 @@ def _apply_focus_state(
             highlighted_position_keys.update(
                 _position_option_key(move.destination) for move in passthrough_moves
             )
-            highlighted_move_keys.update(_move_option_key(move) for move in passthrough_moves)
+            highlighted_move_keys.update(_move_group_key(move) for move in passthrough_moves)
         if show_incoming_moves:
             visible_incoming_moves = [
                 move
                 for move in moves_by_key.values()
                 if move.destination is selected_position
+                and (offer_hand_passthrough or move.move_type != MoveType.OFFER_OR_DROP)
             ]
             highlighted_position_keys.update(
                 _position_option_key(move.source) for move in visible_incoming_moves
             )
-            highlighted_move_keys.update(_move_option_key(move) for move in visible_incoming_moves)
+            highlighted_move_keys.update(_move_group_key(move) for move in visible_incoming_moves)
     elif selection_kind == "move" and selection_key in moves_by_key:
+        selected_position_key = None
         selected_move = moves_by_key[selection_key]
         highlighted_position_keys = {
             _position_option_key(selected_move.source),
@@ -1260,6 +1459,11 @@ def _apply_focus_state(
         return
 
     for position_key, items in position_items_by_key.items():
+        if items and isinstance(items[0], QGraphicsEllipseItem):
+            fill_color = _position_fill_color(positions_by_key[position_key])
+            if position_key == selected_position_key:
+                fill_color = fill_color.darker(112)
+            items[0].setBrush(QBrush(fill_color))
         opacity = 1.0 if position_key in highlighted_position_keys else DIMMED_OPACITY
         for item in items:
             item.setOpacity(opacity)
