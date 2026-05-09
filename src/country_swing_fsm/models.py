@@ -53,14 +53,7 @@ class Position:
 @dataclass(slots=True)
 class SubMove:
     role: Role
-    is_turn: bool
-    _source_position: Position | None = field(default=None, init=False, repr=False)
-
-    @property
-    def turn_direction(self) -> Direction | None:
-        if not self.is_turn or self._source_position is None:
-            return None
-        return self._source_position.sub_position_for_role(self.role).start_step_foot
+    turn_direction: Direction | None
 
 
 @dataclass(slots=True)
@@ -78,9 +71,6 @@ class Move:
         roles = {sub_move.role for sub_move in self.sub_moves}
         if roles != {Role.LEAD, Role.FOLLOW}:
             raise ValueError("A move must contain one lead and one follow sub-move.")
-
-        for sub_move in self.sub_moves:
-            sub_move._source_position = self.source
 
     def sub_move_for_role(self, role: Role) -> SubMove:
         for sub_move in self.sub_moves:
