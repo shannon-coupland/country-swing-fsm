@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 from country_swing_fsm.enums import Direction, MoveType, PositionType, Role
 from country_swing_fsm.models import Move, Position
 from country_swing_fsm.ui.combo_builder_tab import ComboBuilderTab
-from country_swing_fsm.ui.explore_tab import PositionsAndMovesTab
+from country_swing_fsm.ui.explore_tab import ExploreTab
 from country_swing_fsm.ui.practice_tab import PracticeTab
 
 
@@ -92,6 +92,7 @@ class MainWindow(QMainWindow):
         self.moves_button: QToolButton | None = None
         self.sidebar_toggle_button: QToolButton | None = None
         self.sidebar: QWidget | None = None
+        self.explore_tab: ExploreTab | None = None
         self.position_actions_by_key: dict[str, QAction] = {}
         self.move_type_actions_by_type: dict[MoveType, QAction] = {}
         self.show_all_positions_action: QAction | None = None
@@ -237,7 +238,8 @@ class MainWindow(QMainWindow):
         layout.setSpacing(0)
 
         tabs = QTabWidget()
-        tabs.addTab(PositionsAndMovesTab(), "Explore")
+        self.explore_tab = ExploreTab()
+        tabs.addTab(self.explore_tab, "Explore")
         tabs.addTab(ComboBuilderTab(), "Combo Builder")
         tabs.addTab(PracticeTab(), "Practice")
         layout.addWidget(tabs)
@@ -504,6 +506,13 @@ class MainWindow(QMainWindow):
             ),
             preserve_view=preserve_view,
         )
+        if self.explore_tab is not None:
+            self.explore_tab.update_content(
+                visible_positions=visible_positions,
+                visible_moves=visible_moves,
+                selected_focus=self.selected_focus,
+                display_role=self.display_role,
+            )
 
     def _sorted_position_selector_positions(self) -> list[Position]:
         left_positions = _sorted_column_positions(
