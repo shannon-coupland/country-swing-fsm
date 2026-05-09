@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt
-from PySide6.QtGui import QAction, QBrush, QColor, QPainter, QPainterPath, QPen, QPolygonF, QTextOption, QTransform
+from PySide6.QtGui import QAction, QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF, QTextOption, QTransform
 from PySide6.QtWidgets import (
     QCheckBox,
     QGraphicsEllipseItem,
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QSlider,
+    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -27,6 +28,9 @@ from PySide6.QtWidgets import (
 
 from country_swing_fsm.enums import Direction, MoveType, PositionType, Role
 from country_swing_fsm.models import Move, Position
+from country_swing_fsm.ui.combo_builder_tab import ComboBuilderTab
+from country_swing_fsm.ui.explore_tab import PositionsAndMovesTab
+from country_swing_fsm.ui.practice_tab import PracticeTab
 
 
 LEFT_COLOR = QColor("#16a34a")
@@ -42,6 +46,7 @@ LEAD_DIAGRAM_COLOR = QColor("#ec4899")
 FOLLOW_DIAGRAM_COLOR = QColor("#2563eb")
 DIAGRAM_LINE_COLOR = QColor("#334155")
 DIAGRAM_LINE_OUTLINE_COLOR = QColor("#ffffff")
+SIDEBAR_WIDTH = 360
 
 CIRCLE_DIAMETER = 120.0
 LEFT_COLUMN_X = 120.0
@@ -85,6 +90,8 @@ class MainWindow(QMainWindow):
         self.all_moves = moves
         self.position_button: QToolButton | None = None
         self.moves_button: QToolButton | None = None
+        self.sidebar_toggle_button: QToolButton | None = None
+        self.sidebar: QWidget | None = None
         self.position_actions_by_key: dict[str, QAction] = {}
         self.move_type_actions_by_type: dict[MoveType, QAction] = {}
         self.show_all_positions_action: QAction | None = None
@@ -124,7 +131,13 @@ class MainWindow(QMainWindow):
         central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.setSpacing(0)
         central_layout.addWidget(self._build_filter_bar())
-        central_layout.addWidget(self.view)
+        content_widget = QWidget()
+        content_layout = QHBoxLayout(content_widget)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+        content_layout.addWidget(self._build_sidebar())
+        content_layout.addWidget(self.view, 1)
+        central_layout.addWidget(content_widget, 1)
         self.setCentralWidget(central_widget)
 
         self._refresh_scene()
@@ -143,11 +156,14 @@ class MainWindow(QMainWindow):
         left_container = QWidget()
         left_layout = QHBoxLayout(left_container)
         left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(0)
+        left_layout.setSpacing(8)
+
+        self.sidebar_toggle_button = self._build_sidebar_toggle_button()
+        left_layout.addWidget(self.sidebar_toggle_button)
 
         mode_container = QWidget()
         mode_layout = QHBoxLayout(mode_container)
-        mode_layout.setContentsMargins(0, 0, 8, 0)
+        mode_layout.setContentsMargins(0, 0, 0, 0)
         mode_layout.setSpacing(6)
         lead_mode_label = QLabel("Lead View")
         lead_mode_label.setStyleSheet(
@@ -195,6 +211,45 @@ class MainWindow(QMainWindow):
         layout.addWidget(center_container, 0, Qt.AlignmentFlag.AlignHCenter)
         layout.addWidget(right_container, 1)
         return bar
+
+    def _build_sidebar_toggle_button(self) -> QToolButton:
+        button = QToolButton()
+        button.setText("☰")
+        button.setAutoRaise(True)
+        button.setToolTip("Toggle sidebar")
+        button_font = QFont(button.font())
+        button_font.setPointSize(14)
+        button_font.setBold(True)
+        button.setFont(button_font)
+        button.setStyleSheet(
+            f"QToolButton {{ background-color: {TOP_BAR_COLOR.name()}; border: 1px solid #94a3b8; border-radius: 6px; padding: 2px 10px; color: {TEXT_COLOR.name()}; }}"
+        )
+        button.clicked.connect(self._toggle_sidebar)
+        return button
+
+    def _build_sidebar(self) -> QWidget:
+        sidebar = QWidget()
+        sidebar.setFixedWidth(SIDEBAR_WIDTH)
+        sidebar.setStyleSheet("border-right: 1px solid #cbd5e1;")
+
+        layout = QVBoxLayout(sidebar)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        tabs = QTabWidget()
+        tabs.addTab(PositionsAndMovesTab(), "Explore")
+        tabs.addTab(ComboBuilderTab(), "Combo Builder")
+        tabs.addTab(PracticeTab(), "Practice")
+        layout.addWidget(tabs)
+
+        sidebar.hide()
+        self.sidebar = sidebar
+        return sidebar
+
+    def _toggle_sidebar(self) -> None:
+        if self.sidebar is None:
+            return
+        self.sidebar.setVisible(not self.sidebar.isVisible())
 
     def _add_position_selector_button(self, layout: QHBoxLayout) -> None:
         button = QToolButton()
@@ -533,6 +588,8 @@ class DiagramView(QGraphicsView):
     def __init__(self, scene: QGraphicsScene) -> None:
         super().__init__(scene)
         self._has_manual_zoom = False
+        self._is_panning = False
+        self._pan_start = QPoint()
         self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         self.setBackgroundBrush(BACKGROUND_COLOR)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -563,6 +620,33 @@ class DiagramView(QGraphicsView):
             return
 
         super().wheelEvent(event)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.MiddleButton:
+            self._is_panning = True
+            self._pan_start = event.position().toPoint()
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._is_panning:
+            delta = event.position().toPoint() - self._pan_start
+            self._pan_start = event.position().toPoint()
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.MiddleButton and self._is_panning:
+            self._is_panning = False
+            self.unsetCursor()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
     def load_scene(self, scene: QGraphicsScene, preserve_view: bool = False) -> None:
         previous_transform = self.transform()
@@ -603,9 +687,11 @@ def _add_menu_header(menu: QMenu, label: str) -> QLabel:
     layout.setSpacing(0)
 
     header = QLabel(label, container)
-    header.setStyleSheet(
-        f"color: {TEXT_COLOR.name()}; font-weight: 700; font-size: 11px;"
-    )
+    header_font = QFont(header.font())
+    header_font.setPointSize(9)
+    header_font.setBold(True)
+    header.setFont(header_font)
+    header.setStyleSheet(f"color: {TEXT_COLOR.name()};")
     layout.addWidget(header)
 
     action = QWidgetAction(menu)
