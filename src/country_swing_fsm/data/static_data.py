@@ -171,7 +171,7 @@ def _validate_position_ids() -> None:
             position
             for position in ALL_POSITIONS
             if (
-                position.position_type != PositionType.ACCENT
+                not _is_accent_position(position)
                 and position.lead_start_step_foot == Direction.LEFT
             )
         ]
@@ -181,13 +181,13 @@ def _validate_position_ids() -> None:
             position
             for position in ALL_POSITIONS
             if (
-                position.position_type != PositionType.ACCENT
+                not _is_accent_position(position)
                 and position.lead_start_step_foot == Direction.RIGHT
             )
         ]
     )
     accent_positions = _sorted_accent_positions(
-        [position for position in ALL_POSITIONS if position.position_type == PositionType.ACCENT]
+        [position for position in ALL_POSITIONS if _is_accent_position(position)]
     )
 
     _validate_side_position_ids("left", left_positions)
@@ -233,6 +233,10 @@ def _sorted_accent_positions(positions: list[Position]) -> list[Position]:
     return sorted(positions, key=lambda position: position.position_id)
 
 
+def _is_accent_position(position: Position) -> bool:
+    return position.position_type in {PositionType.ACCENT_DIP, PositionType.ACCENT_OTHER}
+
+
 def _hands_joined_sort_key(position: Position) -> tuple[int, ...]:
     return tuple(
         _DIRECTION_ORDER[direction]
@@ -258,7 +262,7 @@ FIRST_HALF = create_position(
         ),
         create_move(
             label="Arch",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=Direction.LEFT,
             follow_turn_direction=None,
             dest_position=lambda: SECOND_HALF,
@@ -272,7 +276,7 @@ FIRST_HALF = create_position(
         ),
         create_move(
             label="Push Off Outside Turn",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: SECOND_HALF,
@@ -293,7 +297,7 @@ FIRST_HALF = create_position(
         ),
         create_move(
             label="Rainbow Outside Turn(s)",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: SECOND_HALF_CROSSED,
@@ -342,7 +346,7 @@ FIRST_HALF_OPPOSITE = create_position(
 
 FIRST_HALF_CATCH = create_position(
     position_id=3,
-    label="Catch Right Side",
+    label="Catch Left Side",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT],
@@ -358,14 +362,14 @@ FIRST_HALF_CATCH = create_position(
         ),
         create_move(
             label="Fishtail",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: SECOND_HALF_CATCH,
         ),
         create_move(
-            label="Pull Into Duck Turn",
-            move_type=MoveType.SPICED_UP,
+            label="Pull Into Neck Roll",
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: SECOND_HALF_OPPOSITE
@@ -391,28 +395,28 @@ FIRST_HALF_BOTH = create_position(
         ),
         create_move(
             label="Spinneroo (Step to Left)",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: SECOND_HALF_BOTH_TWISTED,
         ),
         create_move(
             label="Outside Turn (Hammerlock)",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK,
         ),
         create_move(
             label="Arm Slide",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: SECOND_HALF_CROSSED,
         ),
         create_move(
             label="Opposite Hand Arm Slide",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE,
@@ -440,14 +444,14 @@ FIRST_HALF_BOTH = create_position(
         ),
         create_move(
             label="Pretzel First Half (lead under left, turn follow with left)",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=Direction.LEFT,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: FIRST_HALF_BOTH_BACK_TO_BACK
         ),
         create_move(
             label="Full Pretzel",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=Direction.LEFT,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: FIRST_HALF_BOTH
@@ -467,7 +471,7 @@ FIRST_HALF_BOTH_CUDDLE = create_position(
     moves=[
         create_move(
             label="Trust Fall",
-            move_type=MoveType.ACCENT,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: FIRST_HALF_TRUST_FALL,
@@ -502,10 +506,17 @@ FIRST_HALF_BOTH_CUDDLE = create_position(
         ),
         create_move(
             label="Double Turn Into Hammerlock",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK
+        ),
+        create_move(
+            label="Cuddle Switch (cuddle, 180, throw out and back to normal cuddle)",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=None,
+            follow_turn_direction=Direction.LEFT,
+            dest_position=lambda: FIRST_HALF_BOTH_CUDDLE
         )
     ],
 )
@@ -522,7 +533,7 @@ FIRST_HALF_BOTH_BACK_TO_BACK = create_position(
     moves=[
         create_move(
             label="Pretzel Second Half (follow under right, lead turns under left)",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=Direction.LEFT,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: FIRST_HALF_BOTH
@@ -536,11 +547,18 @@ FIRST_HALF_BOTH_BACK_TO_BACK = create_position(
         ),
         create_move(
             label="Pull Left and Peek",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: SECOND_HALF_BOTH_BACK_TO_BACK
         ),
+        create_move(
+            label="Hammerlock",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=None,
+            follow_turn_direction=None,
+            dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK
+        )
     ]
 )
 
@@ -568,7 +586,7 @@ FIRST_HALF_CROSSED = create_position(
         ),
         create_move(
             label="Reverse Sweetheart Left",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=Direction.LEFT,
             follow_turn_direction=None,
             dest_position=lambda: FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT
@@ -620,8 +638,8 @@ FIRST_HALF_CROSSED_OPPOSITE = create_position(
             dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE,
         ),
         create_move(
-            label="Shoulder Lean",
-            move_type=MoveType.ACCENT,
+            label="Turn Into Shoulder Lean",
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: FIRST_HALF_SHOULDER_LEAN_LEFT
@@ -654,14 +672,14 @@ FIRST_HALF_CROSSED_BOTH = create_position(
         ),
         create_move(
             label="Spinneroo (Step to Left)",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: SECOND_HALF_CROSSED_BOTH,
         ),
         create_move(
             label="Duck Under Spinneroo (Turn to Left)",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=Direction.LEFT,
             follow_turn_direction=None,
             dest_position=lambda: SECOND_HALF_CROSSED_BOTH,
@@ -679,7 +697,14 @@ FIRST_HALF_CROSSED_BOTH = create_position(
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE
-        )
+        ),
+        create_move(
+            label="Ribbon Dip Right",
+            move_type=MoveType.ACCENT,
+            lead_turn_direction=None,
+            follow_turn_direction=Direction.RIGHT,
+            dest_position=lambda: SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT
+        ),
     ],
 )
 
@@ -702,24 +727,38 @@ FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT = create_position(
         ),
         create_move(
             label="Drop Right Hand and Lasso",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda:SECOND_HALF_CROSSED_OPPOSITE
         ),
         create_move(
             label="Drop Right Hand + Lasso Into Shoulder Lean Left",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: FIRST_HALF_SHOULDER_LEAN_LEFT
         ),
         create_move(
             label="Pull to Right",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT
+        ),
+        create_move(
+            label="Ribbon Dip Right",
+            move_type=MoveType.ACCENT,
+            lead_turn_direction=None,
+            follow_turn_direction=Direction.RIGHT,
+            dest_position=lambda: SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT
+        ),
+        create_move(
+            label="Both Hands Turn",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=None,
+            follow_turn_direction=Direction.RIGHT,
+            dest_position=lambda: SECOND_HALF_CROSSED_BOTH
         )
     ]
 )
@@ -744,21 +783,21 @@ SECOND_HALF = create_position(
         ),
         create_move(
             label="Inside Turn(s) Into Dip",
-            move_type=MoveType.ACCENT,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_DIP,
         ),
         create_move(
-            label="Right Shoulder Duck",
-            move_type=MoveType.SPICED_UP,
+            label="Right Shoulder Neck Roll",
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF,
         ),
         create_move(
             label="Stop at Left Shoulder",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_CATCH,
@@ -811,14 +850,14 @@ SECOND_HALF_OPPOSITE = create_position(
         ),
         create_move(
             label="J Hook Reset",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF,
         ),
         create_move(
             label="J Hook Into Dip",
-            move_type=MoveType.ACCENT,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_DIP,
@@ -832,7 +871,7 @@ SECOND_HALF_OPPOSITE = create_position(
         ),
         create_move(
             label="J Hook Into Cuddle",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_BOTH_CUDDLE
@@ -843,6 +882,20 @@ SECOND_HALF_OPPOSITE = create_position(
             lead_turn_direction=Direction.RIGHT,
             follow_turn_direction=None,
             dest_position=lambda: SECOND_HALF_OPPOSITE
+        ),
+        create_move(
+            label="Baseball Throw Into Dip",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=Direction.LEFT,
+            follow_turn_direction=Direction.LEFT,
+            dest_position=lambda: FIRST_HALF_DIP
+        ),
+        create_move(
+            label="Baseball Throw Into Reset",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=Direction.LEFT,
+            follow_turn_direction=Direction.LEFT,
+            dest_position=lambda: FIRST_HALF
         )
     ],
 )
@@ -850,7 +903,7 @@ SECOND_HALF_OPPOSITE = create_position(
 
 SECOND_HALF_CATCH = create_position(
     position_id=13,
-    label="Catch Left Side",
+    label="Catch Right Side",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT],
@@ -859,7 +912,7 @@ SECOND_HALF_CATCH = create_position(
     moves=[
         create_move(
             label="Fishtail",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_CATCH
@@ -869,7 +922,7 @@ SECOND_HALF_CATCH = create_position(
             move_type=MoveType.BASIC,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
-            dest_position=lambda: FIRST_HALF
+            dest_position=lambda: FIRST_HALF_OPPOSITE
         )
     ]
 )
@@ -892,21 +945,21 @@ SECOND_HALF_BOTH = create_position(
         ),
         create_move(
             label="Inside Turn Into Cuddle",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_BOTH_CUDDLE,
         ),
         create_move(
             label="Arm Slide",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: FIRST_HALF_CROSSED,
         ),
         create_move(
             label="Opposite Hand Arm Slide",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE,
@@ -933,18 +986,11 @@ SECOND_HALF_BOTH = create_position(
             dest_position=lambda: FIRST_HALF_BOTH
         ),
         create_move(
-            label="Pretzel First Half (lead under right, turn follow with right)",
-            move_type=MoveType.SPICED_UP,
-            lead_turn_direction=Direction.RIGHT,
+            label="Cuddle Wrap",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
-            dest_position=lambda: SECOND_HALF_BOTH_BACK_TO_BACK
-        ),
-        create_move(
-            label="Full Pretzel",
-            move_type=MoveType.SPICED_UP,
-            lead_turn_direction=Direction.RIGHT,
-            follow_turn_direction=Direction.LEFT,
-            dest_position=lambda: SECOND_HALF_BOTH
+            dest_position=lambda: FIRST_HALF_OPPOSITE
         )
     ],
 )
@@ -975,17 +1021,31 @@ SECOND_HALF_BOTH_HAMMERLOCK = create_position(
         ),
         create_move(
             label="Duck Under",
-            move_type=MoveType.ROTATE,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: FIRST_HALF_BOTH_BACK_TO_BACK
         ),
         create_move(
             label="Double Turn Into Cuddle",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_BOTH_CUDDLE
+        ),
+        create_move(
+            label="Baseball Throw Into Dip",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=Direction.LEFT,
+            follow_turn_direction=Direction.LEFT,
+            dest_position=lambda: FIRST_HALF_DIP
+        ),
+        create_move(
+            label="Baseball Throw Into Reset",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=Direction.LEFT,
+            follow_turn_direction=Direction.LEFT,
+            dest_position=lambda: FIRST_HALF
         )
     ],
 )
@@ -1001,13 +1061,6 @@ SECOND_HALF_BOTH_BACK_TO_BACK = create_position(
     crossed=False,
     moves=[
         create_move(
-            label="Pretzel Second Half (follow under left, lead turns under right)",
-            move_type=MoveType.SPICED_UP,
-            lead_turn_direction=Direction.RIGHT,
-            follow_turn_direction=Direction.LEFT,
-            dest_position=lambda: SECOND_HALF_BOTH
-        ),
-        create_move(
             label="Rotate Left",
             move_type=MoveType.ROTATE,
             lead_turn_direction=None,
@@ -1016,10 +1069,10 @@ SECOND_HALF_BOTH_BACK_TO_BACK = create_position(
         ),
         create_move(
             label="Pull Right and Peek",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=None,
-            dest_position=lambda: SECOND_HALF_BOTH_BACK_TO_BACK
+            dest_position=lambda: FIRST_HALF_BOTH_BACK_TO_BACK
         ),
     ]
 )
@@ -1042,10 +1095,17 @@ SECOND_HALF_BOTH_TWISTED = create_position(
         ),
         create_move(
             label="Spinneroo (Step to Right)",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_BOTH,
+        ),
+        create_move(
+            label="Back to Back",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=None,
+            follow_turn_direction=None,
+            dest_position=lambda: FIRST_HALF_BOTH_BACK_TO_BACK
         )
     ],
 )
@@ -1067,14 +1127,14 @@ SECOND_HALF_CROSSED = create_position(
         ),
         create_move(
             label="J Hook Reset",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF,
         ),
         create_move(
             label="J Hook Into Dip",
-            move_type=MoveType.ACCENT,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_DIP,
@@ -1102,14 +1162,14 @@ SECOND_HALF_CROSSED = create_position(
         ),
         create_move(
             label="S Dip",
-            move_type=MoveType.ACCENT,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_S_DIP
         ),
         create_move(
-            label="Shoulder Lean",
-            move_type=MoveType.ACCENT,
+            label="Turn Into Shoulder Lean",
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: SECOND_HALF_SHOULDER_LEAN_RIGHT
@@ -1155,11 +1215,18 @@ SECOND_HALF_CROSSED_OPPOSITE = create_position(
         ),
         create_move(
             label="Reverse Sweetheart Right",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=Direction.RIGHT,
             follow_turn_direction=None,
             dest_position=lambda: SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT
-        )
+        ),
+        create_move(
+            label="J Hook Reset",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=None,
+            follow_turn_direction=Direction.LEFT,
+            dest_position=lambda: FIRST_HALF,
+        ),
     ],
 )
 
@@ -1188,13 +1255,13 @@ SECOND_HALF_CROSSED_BOTH = create_position(
         ),
         create_move(
             label="Spinneroo (Step to Right)",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
         ),create_move(
             label="Duck Under Spinneroo (Turn to Right)",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=Direction.RIGHT,
             follow_turn_direction=None,
             dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
@@ -1212,6 +1279,13 @@ SECOND_HALF_CROSSED_BOTH = create_position(
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE
+        ),
+        create_move(
+            label="Ribbon Dip Left",
+            move_type=MoveType.ACCENT,
+            lead_turn_direction=None,
+            follow_turn_direction=Direction.LEFT,
+            dest_position=lambda: FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT
         )
     ],
 )
@@ -1235,24 +1309,38 @@ SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT = create_position(
         ),
         create_move(
             label="Drop Left Hand and Lasso",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda:FIRST_HALF_CROSSED
         ),
         create_move(
             label="Lasso Into Shoulder Lean Right",
-            move_type=MoveType.ACCENT,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: SECOND_HALF_SHOULDER_LEAN_RIGHT
         ),
         create_move(
             label="Pull to Left",
-            move_type=MoveType.SPICED_UP,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT
+        ),
+        create_move(
+            label="Ribbon Dip Left",
+            move_type=MoveType.ACCENT,
+            lead_turn_direction=None,
+            follow_turn_direction=Direction.LEFT,
+            dest_position=lambda: FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT
+        ),
+        create_move(
+            label="Both Hands Turn",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=None,
+            follow_turn_direction=Direction.LEFT,
+            dest_position=lambda: FIRST_HALF_CROSSED_BOTH
         )
     ]
 )
@@ -1261,20 +1349,27 @@ SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT = create_position(
 # Accent Positions
 FIRST_HALF_DIP = create_position(
     position_id=22,
-    label="Basic Dip",
+    label="Left Dip",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[],
     follow_hands_joined=[],
-    position_type=PositionType.ACCENT,
+    position_type=PositionType.ACCENT_DIP,
     moves=[
         create_move(
             label="Dip and Reset",
-            move_type=MoveType.ACCENT,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: SECOND_HALF,
-        )
+        ),
+        create_move(
+            label="Dip and Neck Roll",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=None,
+            follow_turn_direction=None,
+            dest_position=lambda: SECOND_HALF_OPPOSITE,
+        ),
     ],
 )
 
@@ -1285,11 +1380,11 @@ FIRST_HALF_S_DIP = create_position(
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT],
-    position_type=PositionType.ACCENT,
+    position_type=PositionType.ACCENT_DIP,
     moves=[
         create_move(
             label="Dip and Reset",
-            move_type=MoveType.ACCENT,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: SECOND_HALF_CROSSED,
@@ -1304,11 +1399,11 @@ FIRST_HALF_TRUST_FALL = create_position(
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[],
     follow_hands_joined=[],
-    position_type=PositionType.ACCENT,
+    position_type=PositionType.ACCENT_OTHER,
     moves=[
         create_move(
             label="Trust Fall and Reset",
-            move_type=MoveType.ACCENT,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: FIRST_HALF,
@@ -1323,18 +1418,18 @@ FIRST_HALF_SHOULDER_LEAN_LEFT = create_position(
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.LEFT],
-    position_type=PositionType.ACCENT,
+    position_type=PositionType.ACCENT_OTHER,
     moves=[
         create_move(
             label="Lean and Arm Slide",
-            move_type=MoveType.ACCENT,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: SECOND_HALF_OPPOSITE,
         ),
         create_move(
             label="Lean and Turn with Shoulder Hand",
-            move_type=MoveType.ACCENT,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE
@@ -1349,18 +1444,18 @@ SECOND_HALF_SHOULDER_LEAN_RIGHT = create_position(
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT],
-    position_type=PositionType.ACCENT,
+    position_type=PositionType.ACCENT_OTHER,
     moves=[
         create_move(
             label="Lean and Arm Slide",
-            move_type=MoveType.ACCENT,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: FIRST_HALF,
         ),
         create_move(
             label="Lean and Turn with Shoulder Hand",
-            move_type=MoveType.ACCENT,
+            move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: FIRST_HALF_CROSSED
@@ -1371,3 +1466,29 @@ SECOND_HALF_SHOULDER_LEAN_RIGHT = create_position(
 
 ALL_POSITIONS: list[Position] = [definition.position for definition in _POSITION_DEFINITIONS]
 ALL_MOVES = _build_all_moves()
+
+# TODOs
+# Clean up move naming? labels dependent on turn direction if not supplied? Actually, probably better if the move names do not specify who is turning (except maybe lead) or which direction to go - save that for the description. Basically make the move labels impervious to Lead/Follow view
+# Consider adding move duration - shortest path
+# Add Practice Mode - uses visible states/moves, once a starting state is chosen, hit Play button. Slider determines speed. Pause and Stop buttons. Reads out move and pings 3 times in preparation for next move
+# Add side panel - selected Position includes position info and table of outgoing move information (include outside turn). Selected Move has move information, including source, destination, inside vs outside turn
+# Add slightly darker highlight on number on position actually selected (helps in Offer/Drop Hand Passthrough)
+# WHAT MATTERS FOR INSIDE VS OUTSIDE TURN: 
+# If the hand being held during the turn is the same hand as the direction turning, then outside. 
+# If hand being held is the opposite from direction turning, then inside
+# add inside vs. outside turn calculated properties for SubMove, but to the Move, add an optional "offered_hand" property that supersedes hand of source state
+# If no offered_hand, then use hand of source state. If both hands joined on source state, ...?
+
+# Try out all moves
+# Learn more moves and add them! Baseball throw, dip both sides
+
+# Upper Arm Dip - outside turn using left hand, follow turns extra 180 degrees, lead grabs follow left upper arm with right hand (standing far away) and pulls/lowers into dip
+
+# Ribbon Dip
+# Start from 20 - hold hands real good, lead holding follow out to their left
+# Spinneroo - follow travels to left, lead ducks under their right at end of spinneroo, steps out left leg to support and extends left arm as follow leans back
+# 
+# Baseball Throw - J hook alternative
+# step 1: swap feet so you can step and turn left instead of right, pull, duck under right arm, throw hand, turn rest of the way around, catch into dip or whatever
+# Stretch into baseball throw (include extra lil right step so lead can turn left)
+

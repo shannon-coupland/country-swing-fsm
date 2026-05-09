@@ -285,7 +285,7 @@ class MainWindow(QMainWindow):
                 [
                     position
                     for position in sorted_positions
-                    if position.position_type != PositionType.ACCENT and not position.crossed
+                    if not _is_accent_position(position) and not position.crossed
                 ],
             ),
             (
@@ -293,12 +293,12 @@ class MainWindow(QMainWindow):
                 [
                     position
                     for position in sorted_positions
-                    if position.position_type != PositionType.ACCENT and position.crossed
+                    if not _is_accent_position(position) and position.crossed
                 ],
             ),
             (
                 "Accent",
-                [position for position in sorted_positions if position.position_type == PositionType.ACCENT],
+                [position for position in sorted_positions if _is_accent_position(position)],
             ),
         ]
 
@@ -456,7 +456,7 @@ class MainWindow(QMainWindow):
                 position
                 for position in self.all_positions
                 if (
-                    position.position_type != PositionType.ACCENT
+                    not _is_accent_position(position)
                     and position.lead_start_step_foot == Direction.LEFT
                 )
             ]
@@ -466,13 +466,13 @@ class MainWindow(QMainWindow):
                 position
                 for position in self.all_positions
                 if (
-                    position.position_type != PositionType.ACCENT
+                    not _is_accent_position(position)
                     and position.lead_start_step_foot == Direction.RIGHT
                 )
             ]
         )
         accent_positions = _sorted_accent_positions(
-            [position for position in self.all_positions if position.position_type == PositionType.ACCENT]
+            [position for position in self.all_positions if _is_accent_position(position)]
         )
         return [*left_positions, *right_positions, *accent_positions]
 
@@ -681,7 +681,7 @@ def build_scene(
             position
             for position in positions
             if (
-                position.position_type != PositionType.ACCENT
+                not _is_accent_position(position)
                 and position.lead_start_step_foot == Direction.LEFT
             )
         ]
@@ -691,13 +691,13 @@ def build_scene(
             position
             for position in positions
             if (
-                position.position_type != PositionType.ACCENT
+                not _is_accent_position(position)
                 and position.lead_start_step_foot == Direction.RIGHT
             )
         ]
     )
     accent_positions = _sorted_accent_positions(
-        [position for position in positions if position.position_type == PositionType.ACCENT]
+        [position for position in positions if _is_accent_position(position)]
     )
     accent_row_width = (max(len(accent_positions) - 1, 0)) * ACCENT_SPACING
     right_column_x = max(
@@ -797,6 +797,10 @@ def _sorted_column_positions(positions: list[Position]) -> list[Position]:
 
 def _sorted_accent_positions(positions: list[Position]) -> list[Position]:
     return sorted(positions, key=lambda position: position.position_id)
+
+
+def _is_accent_position(position: Position) -> bool:
+    return position.position_type in {PositionType.ACCENT_DIP, PositionType.ACCENT_OTHER}
 
 
 def _hands_joined_sort_key(position: Position) -> tuple[int, ...]:
@@ -1241,7 +1245,7 @@ def _add_move_edge(
     label: str,
     move_key: str,
 ) -> list[QGraphicsItem]:
-    if move.source.position_type == PositionType.ACCENT:
+    if _is_accent_position(move.source):
         color = ACCENT_COLOR
     else:
         color = LEFT_COLOR if move.source.lead_start_step_foot == Direction.LEFT else RIGHT_COLOR
@@ -1336,7 +1340,7 @@ def _edge_routing(
 
 
 def _position_side(position: Position) -> str:
-    if position.position_type == PositionType.ACCENT:
+    if _is_accent_position(position):
         return "accent"
     if position.lead_start_step_foot == Direction.LEFT:
         return "left"
