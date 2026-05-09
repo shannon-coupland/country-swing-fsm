@@ -523,7 +523,21 @@ FIRST_HALF_BOTH_BACK_TO_BACK = create_position(
             is_lead_turn=True,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_BOTH
-        )
+        ),
+        create_move(
+            label="Rotate Right",
+            move_type=MoveType.ROTATE,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_BOTH_BACK_TO_BACK
+        ),
+        create_move(
+            label="Pull Left and Peek",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_BOTH_BACK_TO_BACK
+        ),
     ]
 )
 
@@ -536,7 +550,7 @@ FIRST_HALF_CROSSED = create_position(
     position_type=PositionType.OPEN,
     moves=[
         create_move(
-            label="Behind the Back Pass",
+            label="Behind the Back Pass - Reset Hands",
             move_type=MoveType.BASIC,
             is_lead_turn=True,
             is_follow_turn=False,
@@ -957,18 +971,11 @@ SECOND_HALF_BOTH_HAMMERLOCK = create_position(
             dest_position=lambda: FIRST_HALF_BOTH
         ),
         create_move(
-            label="Duck Under Rotate",
+            label="Duck Under",
             move_type=MoveType.ROTATE,
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK
-        ),
-        create_move(
-            label="Duck Under Peek",
-            move_type=MoveType.SPICED_UP,
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_BOTH_BACK_TO_BACK
         ),
         create_move(
             label="Double Turn Into Cuddle",
@@ -996,7 +1003,21 @@ SECOND_HALF_BOTH_BACK_TO_BACK = create_position(
             is_lead_turn=True,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_BOTH
-        )
+        ),
+        create_move(
+            label="Rotate Left",
+            move_type=MoveType.ROTATE,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_BOTH_BACK_TO_BACK
+        ),
+        create_move(
+            label="Pull Right and Peek",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_BOTH_BACK_TO_BACK
+        ),
     ]
 )
 
