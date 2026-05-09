@@ -310,6 +310,7 @@ FIRST_HALF = create_position(
             dest_position=lambda: SECOND_HALF_CROSSED,
         ),
         create_move(
+            # description: Anchor Dip - outside turn using left hand, follow turns extra 180 degrees, lead grabs follow left upper arm with right hand (standing far away) and pulls/lowers into dip
             label="Outside Turn Into Anchor Dip",
             move_type=MoveType.SPICY,
             lead_turn_direction=None,
@@ -480,7 +481,7 @@ FIRST_HALF_BOTH_CUDDLE = create_position(
     moves=[
         create_move(
             label="Trust Fall",
-            move_type=MoveType.SPICY,
+            move_type=MoveType.ACCENT,
             lead_turn_direction=None,
             follow_turn_direction=None,
             dest_position=lambda: FIRST_HALF_TRUST_FALL,
@@ -650,7 +651,7 @@ FIRST_HALF_CROSSED_OPPOSITE = create_position(
         ),
         create_move(
             label="Turn Into Shoulder Lean",
-            move_type=MoveType.SPICY,
+            move_type=MoveType.ACCENT,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: FIRST_HALF_SHOULDER_LEAN_LEFT
@@ -739,15 +740,15 @@ FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT = create_position(
             dest_position=lambda: FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT
         ),
         create_move(
-            label="Drop Right Hand and Lasso",
+            label="Lasso",
             move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda:SECOND_HALF_CROSSED_OPPOSITE
         ),
         create_move(
-            label="Drop Right Hand + Lasso Into Shoulder Lean Left",
-            move_type=MoveType.SPICY,
+            label="Lasso Into Shoulder Lean",
+            move_type=MoveType.ACCENT,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: FIRST_HALF_SHOULDER_LEAN_LEFT
@@ -796,7 +797,7 @@ SECOND_HALF = create_position(
         ),
         create_move(
             label="Inside Turn(s) Into Dip",
-            move_type=MoveType.SPICY,
+            move_type=MoveType.ACCENT,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_DIP,
@@ -870,7 +871,7 @@ SECOND_HALF_OPPOSITE = create_position(
         ),
         create_move(
             label="J Hook Into Dip",
-            move_type=MoveType.SPICY,
+            move_type=MoveType.ACCENT,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_DIP,
@@ -898,7 +899,7 @@ SECOND_HALF_OPPOSITE = create_position(
         ),
         create_move(
             label="Baseball Throw Into Dip",
-            move_type=MoveType.SPICY,
+            move_type=MoveType.ACCENT,
             lead_turn_direction=Direction.LEFT,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_DIP
@@ -1048,7 +1049,7 @@ SECOND_HALF_BOTH_HAMMERLOCK = create_position(
         ),
         create_move(
             label="Baseball Throw Into Dip",
-            move_type=MoveType.SPICY,
+            move_type=MoveType.ACCENT,
             lead_turn_direction=Direction.LEFT,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_DIP
@@ -1148,7 +1149,7 @@ SECOND_HALF_CROSSED = create_position(
         ),
         create_move(
             label="J Hook Into Dip",
-            move_type=MoveType.SPICY,
+            move_type=MoveType.ACCENT,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_DIP,
@@ -1176,14 +1177,14 @@ SECOND_HALF_CROSSED = create_position(
         ),
         create_move(
             label="S Dip",
-            move_type=MoveType.SPICY,
+            move_type=MoveType.ACCENT,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_S_DIP
         ),
         create_move(
             label="Turn Into Shoulder Lean",
-            move_type=MoveType.SPICY,
+            move_type=MoveType.ACCENT,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: SECOND_HALF_SHOULDER_LEAN_RIGHT
@@ -1324,15 +1325,15 @@ SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT = create_position(
             dest_position=lambda: SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT
         ),
         create_move(
-            label="Drop Left Hand and Lasso",
+            label="Lasso",
             move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda:FIRST_HALF_CROSSED
         ),
         create_move(
-            label="Lasso Into Shoulder Lean Right",
-            move_type=MoveType.SPICY,
+            label="Lasso Into Shoulder Lean",
+            move_type=MoveType.ACCENT,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: SECOND_HALF_SHOULDER_LEAN_RIGHT
@@ -1407,7 +1408,7 @@ FIRST_HALF_S_DIP = create_position(
         )
     ],
 )
-# Anchor Dip - outside turn using left hand, follow turns extra 180 degrees, lead grabs follow left upper arm with right hand (standing far away) and pulls/lowers into dip
+
 SECOND_HALF_ANCHOR_DIP = create_position(
     position_id=24,
     label="Anchor Dip",
@@ -1426,7 +1427,7 @@ SECOND_HALF_ANCHOR_DIP = create_position(
         ),
         create_move(
             label="Dip and Pull Into Dip",
-            move_type=MoveType.SPICY,
+            move_type=MoveType.ACCENT,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_DIP,
