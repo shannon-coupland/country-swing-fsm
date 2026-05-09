@@ -401,7 +401,8 @@ FIRST_HALF_BOTH = create_position(
             dest_position=lambda: SECOND_HALF_BOTH,
         ),
         create_move(
-            label="Spinneroo (Step to Left)",
+            # description: (Step to Left)
+            label="Spinneroo",
             move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
@@ -450,7 +451,8 @@ FIRST_HALF_BOTH = create_position(
             dest_position=lambda: SECOND_HALF_BOTH
         ),
         create_move(
-            label="Pretzel First Half (lead under left, turn follow with left)",
+            # description:  (lead under left, turn follow with left)
+            label="Pretzel First Half",
             move_type=MoveType.SPICY,
             lead_turn_direction=Direction.LEFT,
             follow_turn_direction=Direction.RIGHT,
@@ -519,7 +521,8 @@ FIRST_HALF_BOTH_CUDDLE = create_position(
             dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK
         ),
         create_move(
-            label="Cuddle Switch (cuddle, 180, throw out and back to normal cuddle)",
+            # description: (cuddle, 180, throw out and back to normal cuddle)
+            label="Cuddle Switch",
             move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
@@ -539,7 +542,8 @@ FIRST_HALF_BOTH_BACK_TO_BACK = create_position(
     crossed=False,
     moves=[
         create_move(
-            label="Pretzel Second Half (follow under right, lead turns under left)",
+            # description: (follow under right, lead turns under left)
+            label="Pretzel Second Half",
             move_type=MoveType.SPICY,
             lead_turn_direction=Direction.LEFT,
             follow_turn_direction=Direction.RIGHT,
@@ -678,14 +682,16 @@ FIRST_HALF_CROSSED_BOTH = create_position(
             dest_position=lambda: SECOND_HALF_BOTH,
         ),
         create_move(
-            label="Spinneroo (Step to Left)",
+            # description: (Step to Left)
+            label="Spinneroo",
             move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.RIGHT,
             dest_position=lambda: SECOND_HALF_CROSSED_BOTH,
         ),
         create_move(
-            label="Duck Under Spinneroo (Turn to Left)",
+            # description: (Turn to Left)
+            label="Lead Spinneroo",
             move_type=MoveType.SPICY,
             lead_turn_direction=Direction.LEFT,
             follow_turn_direction=None,
@@ -810,7 +816,7 @@ SECOND_HALF = create_position(
             dest_position=lambda: FIRST_HALF_CATCH,
         ),
         create_move(
-            label="Offer Right Hand + Drop",
+            label="Offer Hand + Drop",
             move_type=MoveType.OFFER_OR_DROP,
             lead_turn_direction=None,
             follow_turn_direction=None,
@@ -1101,7 +1107,8 @@ SECOND_HALF_BOTH_TWISTED = create_position(
             dest_position=lambda: FIRST_HALF_BOTH,
         ),
         create_move(
-            label="Spinneroo (Step to Right)",
+            # description: (Step to Right)
+            label="Spinneroo",
             move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
@@ -1207,7 +1214,7 @@ SECOND_HALF_CROSSED_OPPOSITE = create_position(
             dest_position=lambda: FIRST_HALF,
         ),
         create_move(
-            label="Offer Right Hand + Drop",
+            label="Offer Hand + Drop",
             move_type=MoveType.OFFER_OR_DROP,
             lead_turn_direction=None,
             follow_turn_direction=None,
@@ -1261,13 +1268,15 @@ SECOND_HALF_CROSSED_BOTH = create_position(
             dest_position=lambda: FIRST_HALF_BOTH,
         ),
         create_move(
-            label="Spinneroo (Step to Right)",
+            # description: (Step to Right)
+            label="Spinneroo",
             move_type=MoveType.SPICY,
             lead_turn_direction=None,
             follow_turn_direction=Direction.LEFT,
             dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
         ),create_move(
-            label="Duck Under Spinneroo (Turn to Right)",
+            # description: (Turn to Right)
+            label="Lead Spinneroo",
             move_type=MoveType.SPICY,
             lead_turn_direction=Direction.RIGHT,
             follow_turn_direction=None,
