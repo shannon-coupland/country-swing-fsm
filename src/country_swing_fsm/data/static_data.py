@@ -308,7 +308,14 @@ FIRST_HALF = create_position(
             lead_turn_direction=Direction.LEFT,
             follow_turn_direction=None,
             dest_position=lambda: SECOND_HALF_CROSSED,
-        )
+        ),
+        create_move(
+            label="Outside Turn Into Anchor Dip",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=None,
+            follow_turn_direction=Direction.RIGHT,
+            dest_position=lambda: SECOND_HALF_ANCHOR_DIP,
+        ),
     ],
 )
 
@@ -891,7 +898,7 @@ SECOND_HALF_OPPOSITE = create_position(
             dest_position=lambda: FIRST_HALF_DIP
         ),
         create_move(
-            label="Baseball Throw Into Reset",
+            label="Baseball Throw Reset",
             move_type=MoveType.SPICY,
             lead_turn_direction=Direction.LEFT,
             follow_turn_direction=Direction.LEFT,
@@ -1349,7 +1356,7 @@ SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT = create_position(
 # Accent Positions
 FIRST_HALF_DIP = create_position(
     position_id=22,
-    label="Left Dip",
+    label="Dip",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[],
@@ -1391,9 +1398,35 @@ FIRST_HALF_S_DIP = create_position(
         )
     ],
 )
+# Anchor Dip - outside turn using left hand, follow turns extra 180 degrees, lead grabs follow left upper arm with right hand (standing far away) and pulls/lowers into dip
+SECOND_HALF_ANCHOR_DIP = create_position(
+    position_id=24,
+    label="Anchor Dip",
+    lead_start_step_foot=Direction.RIGHT,
+    follow_start_step_foot=Direction.LEFT,
+    lead_hands_joined=[],
+    follow_hands_joined=[],
+    position_type=PositionType.ACCENT_DIP,
+    moves=[
+        create_move(
+            label="Dip and Pull Into Reset",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=None,
+            follow_turn_direction=Direction.LEFT,
+            dest_position=lambda: FIRST_HALF,
+        ),
+        create_move(
+            label="Dip and Pull Into Dip",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=None,
+            follow_turn_direction=Direction.LEFT,
+            dest_position=lambda: FIRST_HALF_DIP,
+        )
+    ],
+)
 
 FIRST_HALF_TRUST_FALL = create_position(
-    position_id=24,
+    position_id=25,
     label="Trust Fall",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
@@ -1412,7 +1445,7 @@ FIRST_HALF_TRUST_FALL = create_position(
 )
 
 FIRST_HALF_SHOULDER_LEAN_LEFT = create_position(
-    position_id=25,
+    position_id=26,
     label="Shoulder Lean Left",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.LEFT,
@@ -1438,7 +1471,7 @@ FIRST_HALF_SHOULDER_LEAN_LEFT = create_position(
 )
 
 SECOND_HALF_SHOULDER_LEAN_RIGHT = create_position(
-    position_id=26,
+    position_id=27,
     label="Shoulder Lean Right",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.RIGHT,
@@ -1466,29 +1499,3 @@ SECOND_HALF_SHOULDER_LEAN_RIGHT = create_position(
 
 ALL_POSITIONS: list[Position] = [definition.position for definition in _POSITION_DEFINITIONS]
 ALL_MOVES = _build_all_moves()
-
-# TODOs
-# Clean up move naming? labels dependent on turn direction if not supplied? Actually, probably better if the move names do not specify who is turning (except maybe lead) or which direction to go - save that for the description. Basically make the move labels impervious to Lead/Follow view
-# Consider adding move duration - shortest path
-# Add Practice Mode - uses visible states/moves, once a starting state is chosen, hit Play button. Slider determines speed. Pause and Stop buttons. Reads out move and pings 3 times in preparation for next move
-# Add side panel - selected Position includes position info and table of outgoing move information (include outside turn). Selected Move has move information, including source, destination, inside vs outside turn
-# Add slightly darker highlight on number on position actually selected (helps in Offer/Drop Hand Passthrough)
-# WHAT MATTERS FOR INSIDE VS OUTSIDE TURN: 
-# If the hand being held during the turn is the same hand as the direction turning, then outside. 
-# If hand being held is the opposite from direction turning, then inside
-# add inside vs. outside turn calculated properties for SubMove, but to the Move, add an optional "offered_hand" property that supersedes hand of source state
-# If no offered_hand, then use hand of source state. If both hands joined on source state, ...?
-
-# Try out all moves
-# Learn more moves and add them! Baseball throw, dip both sides
-
-# Upper Arm Dip - outside turn using left hand, follow turns extra 180 degrees, lead grabs follow left upper arm with right hand (standing far away) and pulls/lowers into dip
-
-# Ribbon Dip
-# Start from 20 - hold hands real good, lead holding follow out to their left
-# Spinneroo - follow travels to left, lead ducks under their right at end of spinneroo, steps out left leg to support and extends left arm as follow leans back
-# 
-# Baseball Throw - J hook alternative
-# step 1: swap feet so you can step and turn left instead of right, pull, duck under right arm, throw hand, turn rest of the way around, catch into dip or whatever
-# Stretch into baseball throw (include extra lil right step so lead can turn left)
-

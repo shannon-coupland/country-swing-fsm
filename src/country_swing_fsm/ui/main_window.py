@@ -1263,6 +1263,8 @@ def _add_move_edge(
         start_direction=start_direction,
         end_direction=end_direction,
         curvature_offset=_curvature_offset(
+            source=move.source,
+            destination=move.destination,
             source_center=source_center,
             destination_center=destination_center,
         ),
@@ -1323,6 +1325,11 @@ def _edge_routing(
     source_side = _position_side(source)
     destination_side = _position_side(destination)
 
+    if source_side == "accent" and destination_side == "accent":
+        if source.position_id <= destination.position_id:
+            return "bottom_right", "bottom_left", "right", "left"
+        return "bottom_left", "bottom_right", "left", "right"
+
     routing_table = {
         ("left", "right"): ("top_right", "top_left", "right", "right"),
         ("left", "left"): ("top_left", "bottom_left", "left", "right"),
@@ -1348,9 +1355,13 @@ def _position_side(position: Position) -> str:
 
 
 def _curvature_offset(
+    source: Position,
+    destination: Position,
     source_center: QPointF,
     destination_center: QPointF,
 ) -> float:
+    if _is_accent_position(source) and _is_accent_position(destination):
+        return 90.0
     direction_bias = -28.0 if source_center.x() <= destination_center.x() else 28.0
     return direction_bias
 
