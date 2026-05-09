@@ -31,10 +31,10 @@ from country_swing_fsm.models import Move, Position
 
 LEFT_COLOR = QColor("#16a34a")
 RIGHT_COLOR = QColor("#f97316")
-IMPACT_COLOR = QColor("#9333ea")
+ACCENT_COLOR = QColor("#9333ea")
 LEFT_FILL_COLOR = QColor("#dcfce7")
 RIGHT_FILL_COLOR = QColor("#ffedd5")
-IMPACT_FILL_COLOR = QColor("#f3e8ff")
+ACCENT_FILL_COLOR = QColor("#f3e8ff")
 BACKGROUND_COLOR = QColor("#f8fafc")
 TOP_BAR_COLOR = QColor("#e2e8f0")
 TEXT_COLOR = QColor("#0f172a")
@@ -45,10 +45,10 @@ DIAGRAM_LINE_OUTLINE_COLOR = QColor("#ffffff")
 
 CIRCLE_DIAMETER = 120.0
 LEFT_COLUMN_X = 120.0
-MAIN_COLUMN_GAP = 800.0
+MAIN_COLUMN_GAP = 700.0
 RIGHT_COLUMN_X = LEFT_COLUMN_X + MAIN_COLUMN_GAP
-IMPACT_START_X = 220.0
-IMPACT_SPACING = 160.0
+ACCENT_START_X = 220.0
+ACCENT_SPACING = 155.0
 TOP_MARGIN = 80.0
 ROW_SPACING = 220.0
 GROUPED_ROW_SPACING = max(ROW_SPACING / 3.0, CIRCLE_DIAMETER + 24.0)
@@ -73,11 +73,6 @@ GROUP_ORDER = {
     (False, 2): 1,
     (True, 1): 2,
     (True, 2): 3,
-}
-POSITION_TYPE_ORDER = {
-    PositionType.OPEN: 0,
-    PositionType.TWISTED: 1,
-    PositionType.ACCENT: 2,
 }
 DIRECTION_ORDER = {
     Direction.LEFT: 0,
@@ -154,7 +149,7 @@ class MainWindow(QMainWindow):
         mode_layout = QHBoxLayout(mode_container)
         mode_layout.setContentsMargins(0, 0, 8, 0)
         mode_layout.setSpacing(6)
-        lead_mode_label = QLabel("Lead Mode")
+        lead_mode_label = QLabel("Lead View")
         lead_mode_label.setStyleSheet(
             f"color: {LEAD_DIAGRAM_COLOR.name()}; font-weight: 700;"
         )
@@ -168,7 +163,7 @@ class MainWindow(QMainWindow):
         mode_slider.setTickInterval(1)
         mode_slider.valueChanged.connect(self._on_mode_changed)
         mode_layout.addWidget(mode_slider)
-        follow_mode_label = QLabel("Follow Mode")
+        follow_mode_label = QLabel("Follow View")
         follow_mode_label.setStyleSheet(
             f"color: {FOLLOW_DIAGRAM_COLOR.name()}; font-weight: 700;"
         )
@@ -476,10 +471,10 @@ class MainWindow(QMainWindow):
                 )
             ]
         )
-        impact_positions = _sorted_impact_positions(
+        accent_positions = _sorted_accent_positions(
             [position for position in self.all_positions if position.position_type == PositionType.ACCENT]
         )
-        return [*left_positions, *right_positions, *impact_positions]
+        return [*left_positions, *right_positions, *accent_positions]
 
     def _on_focus_change(self, selected_focus: tuple[str, str] | None) -> None:
         if self.selected_focus == selected_focus:
@@ -701,13 +696,13 @@ def build_scene(
             )
         ]
     )
-    impact_positions = _sorted_impact_positions(
+    accent_positions = _sorted_accent_positions(
         [position for position in positions if position.position_type == PositionType.ACCENT]
     )
-    impact_row_width = (max(len(impact_positions) - 1, 0)) * IMPACT_SPACING
+    accent_row_width = (max(len(accent_positions) - 1, 0)) * ACCENT_SPACING
     right_column_x = max(
         RIGHT_COLUMN_X,
-        (2.0 * IMPACT_START_X) + impact_row_width - LEFT_COLUMN_X,
+        (2.5 * ACCENT_START_X) + accent_row_width - LEFT_COLUMN_X,
     )
 
     centers_by_position_id: dict[int, QPointF] = {}
@@ -746,21 +741,21 @@ def build_scene(
             position_key,
         )
 
-    impact_row_start_x = ((LEFT_COLUMN_X + right_column_x) / 2.0) - (impact_row_width / 2.0)
-    impact_row_y = max(
+    accent_row_start_x = ((LEFT_COLUMN_X + right_column_x) / 2.0) - (accent_row_width / 2.0)
+    accent_row_y = max(
         left_y_positions[-1] if left_y_positions else 0.0,
         right_y_positions[-1] if right_y_positions else 0.0,
     ) + ROW_SPACING
 
-    for index, position in enumerate(impact_positions):
-        center = QPointF(impact_row_start_x + (index * IMPACT_SPACING), impact_row_y)
+    for index, position in enumerate(accent_positions):
+        center = QPointF(accent_row_start_x + (index * ACCENT_SPACING), accent_row_y)
         centers_by_position_id[id(position)] = center
         position_key = _position_option_key(position)
         position_items_by_key[position_key] = _add_position_node(
             scene,
             position,
             center,
-            IMPACT_COLOR,
+            ACCENT_COLOR,
             display_role,
             position_key,
         )
@@ -797,32 +792,11 @@ def build_scene(
 
 
 def _sorted_column_positions(positions: list[Position]) -> list[Position]:
-    return sorted(positions, key=_column_position_sort_key)
+    return sorted(positions, key=lambda position: position.position_id)
 
 
-def _sorted_impact_positions(positions: list[Position]) -> list[Position]:
-    return sorted(
-        positions,
-        key=lambda position: (
-            POSITION_TYPE_ORDER[position.position_type],
-            DIRECTION_ORDER[position.lead_start_step_foot],
-            _hands_joined_sort_key(position),
-            position.label or "",
-        ),
-    )
-
-
-def _column_position_sort_key(position: Position) -> tuple[int, int, tuple[int, ...], str]:
-    return (
-        GROUP_ORDER.get(
-            (position.crossed, len(position.sub_position_for_role(Role.LEAD).hands_joined)),
-            len(GROUP_ORDER),
-        ),
-        POSITION_TYPE_ORDER[position.position_type],
-        _single_hand_priority(position),
-        _hands_joined_sort_key(position),
-        position.label or "",
-    )
+def _sorted_accent_positions(positions: list[Position]) -> list[Position]:
+    return sorted(positions, key=lambda position: position.position_id)
 
 
 def _hands_joined_sort_key(position: Position) -> tuple[int, ...]:
@@ -830,13 +804,6 @@ def _hands_joined_sort_key(position: Position) -> tuple[int, ...]:
         DIRECTION_ORDER[direction]
         for direction in position.sub_position_for_role(Role.LEAD).hands_joined
     )
-
-
-def _single_hand_priority(position: Position) -> int:
-    follow_hands_joined = position.sub_position_for_role(Role.FOLLOW).hands_joined
-    if len(follow_hands_joined) != 1:
-        return 0
-    return 0 if follow_hands_joined[0] == Direction.RIGHT else 1
 
 
 def _aligned_column_y_positions(
@@ -1223,7 +1190,7 @@ def _add_position_id_label(
     color: QColor,
     position_key: str,
 ) -> QGraphicsSimpleTextItem:
-    text_item = QGraphicsSimpleTextItem(position.position_id)
+    text_item = QGraphicsSimpleTextItem(str(position.position_id))
     text_item.setBrush(QBrush(color))
     font = text_item.font()
     font.setBold(True)
@@ -1233,7 +1200,7 @@ def _add_position_id_label(
     radius = CIRCLE_DIAMETER / 2.0
 
     side = _position_side(position)
-    if side in {"left", "impact"}:
+    if side in {"left", "accent"}:
         x_position = center.x() - radius - bounds.width() - POSITION_ID_OFFSET
     else:
         x_position = center.x() + radius + POSITION_ID_OFFSET
@@ -1263,7 +1230,7 @@ def _position_fill_color(position: Position) -> QColor:
         return LEFT_FILL_COLOR
     if side == "right":
         return RIGHT_FILL_COLOR
-    return IMPACT_FILL_COLOR
+    return ACCENT_FILL_COLOR
 
 
 def _add_move_edge(
@@ -1275,7 +1242,7 @@ def _add_move_edge(
     move_key: str,
 ) -> list[QGraphicsItem]:
     if move.source.position_type == PositionType.ACCENT:
-        color = IMPACT_COLOR
+        color = ACCENT_COLOR
     else:
         color = LEFT_COLOR if move.source.lead_start_step_foot == Direction.LEFT else RIGHT_COLOR
     pen = QPen(color, 3)
@@ -1355,12 +1322,12 @@ def _edge_routing(
     routing_table = {
         ("left", "right"): ("top_right", "top_left", "right", "right"),
         ("left", "left"): ("top_left", "bottom_left", "left", "right"),
-        ("left", "impact"): ("top_right", "top_left", "right", "right"),
+        ("left", "accent"): ("top_right", "top_left", "right", "right"),
         ("right", "left"): ("bottom_left", "bottom_right", "left", "left"),
         ("right", "right"): ("top_right", "bottom_right", "right", "left"),
-        ("right", "impact"): ("bottom_left", "top_right", "left", "left"),
-        ("impact", "left"): ("top_left", "bottom_right", "left", "left"),
-        ("impact", "right"): ("top_right", "top_left", "right", "right"),
+        ("right", "accent"): ("bottom_left", "top_right", "left", "left"),
+        ("accent", "left"): ("top_left", "bottom_right", "left", "left"),
+        ("accent", "right"): ("top_right", "top_left", "right", "right"),
     }
     return routing_table.get(
         (source_side, destination_side),
@@ -1370,7 +1337,7 @@ def _edge_routing(
 
 def _position_side(position: Position) -> str:
     if position.position_type == PositionType.ACCENT:
-        return "impact"
+        return "accent"
     if position.lead_start_step_foot == Direction.LEFT:
         return "left"
     return "right"

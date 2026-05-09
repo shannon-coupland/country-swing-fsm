@@ -32,11 +32,6 @@ _GROUP_ORDER = {
     (True, 1): 2,
     (True, 2): 3,
 }
-_POSITION_TYPE_ORDER = {
-    PositionType.OPEN: 0,
-    PositionType.TWISTED: 1,
-    PositionType.ACCENT: 2,
-}
 _DIRECTION_ORDER = {
     Direction.LEFT: 0,
     Direction.RIGHT: 1,
@@ -61,6 +56,7 @@ def create_move(
 
 def create_position(
     *,
+    position_id: int,
     lead_start_step_foot: Direction,
     follow_start_step_foot: Direction,
     lead_hands_joined: list[Direction],
@@ -70,6 +66,9 @@ def create_position(
     label: str | None = None,
     crossed: bool | None = None,
 ) -> Position:
+    if not isinstance(position_id, int):
+        raise TypeError("position_id must be an int.")
+
     hand_count = len(lead_hands_joined)
     if hand_count != len(follow_hands_joined):
         raise ValueError("Lead and follow must have the same number of joined hands.")
@@ -90,6 +89,7 @@ def create_position(
         raise ValueError("crossed must be supplied for positions with other than one hand.")
 
     position = Position(
+        position_id=position_id,
         label=label,
         crossed=crossed,
         position_type=position_type,
@@ -126,6 +126,7 @@ def _resolve_destination(destination_reference: DestinationReference) -> Positio
 
 
 def _build_all_moves() -> list[Move]:
+    _validate_position_ids()
     all_moves: list[Move] = []
 
     for position_definition in _POSITION_DEFINITIONS:
@@ -154,71 +155,76 @@ def _build_all_moves() -> list[Move]:
     return all_moves
 
 
-def _assign_position_ids() -> None:
-    ordered_positions = [
-        *_sorted_column_positions(
-            [
-                position
-                for position in ALL_POSITIONS
-                if (
-                    position.position_type != PositionType.ACCENT
-                    and position.lead_start_step_foot == Direction.LEFT
-                )
-            ]
-        ),
-        *_sorted_column_positions(
-            [
-                position
-                for position in ALL_POSITIONS
-                if (
-                    position.position_type != PositionType.ACCENT
-                    and position.lead_start_step_foot == Direction.RIGHT
-                )
-            ]
-        ),
-        *_sorted_impact_positions(
-            [position for position in ALL_POSITIONS if position.position_type == PositionType.ACCENT]
-        ),
-    ]
+def _validate_position_ids() -> None:
+    position_ids = [position.position_id for position in ALL_POSITIONS]
+    if len(set(position_ids)) != len(position_ids):
+        raise ValueError("Position IDs must be unique.")
 
-    for index, position in enumerate(ordered_positions, start=1):
-        position.position_id = str(index)
+    left_positions = _sorted_column_positions(
+        [
+            position
+            for position in ALL_POSITIONS
+            if (
+                position.position_type != PositionType.ACCENT
+                and position.lead_start_step_foot == Direction.LEFT
+            )
+        ]
+    )
+    right_positions = _sorted_column_positions(
+        [
+            position
+            for position in ALL_POSITIONS
+            if (
+                position.position_type != PositionType.ACCENT
+                and position.lead_start_step_foot == Direction.RIGHT
+            )
+        ]
+    )
+    accent_positions = _sorted_accent_positions(
+        [position for position in ALL_POSITIONS if position.position_type == PositionType.ACCENT]
+    )
+
+    _validate_side_position_ids("left", left_positions)
+    _validate_side_position_ids("right", right_positions)
+
+    if left_positions and right_positions and max(position.position_id for position in left_positions) >= min(
+        position.position_id for position in right_positions
+    ):
+        raise ValueError("All left-side position IDs must be less than all right-side position IDs.")
+
+    if right_positions and accent_positions and max(position.position_id for position in right_positions) >= min(
+        position.position_id for position in accent_positions
+    ):
+        raise ValueError("All right-side position IDs must be less than all accent position IDs.")
+
+
+def _validate_side_position_ids(side_label: str, positions: list[Position]) -> None:
+    sorted_by_id = sorted(positions, key=lambda position: position.position_id)
+    previous_group_index = -1
+    previous_position_id = None
+    for position in sorted_by_id:
+        if previous_position_id is not None and position.position_id <= previous_position_id:
+            raise ValueError(f"{side_label.title()}-side position IDs must be strictly increasing.")
+        previous_position_id = position.position_id
+
+        group_index = _GROUP_ORDER.get(
+            (position.crossed, len(position.sub_position_for_role(Role.LEAD).hands_joined)),
+            len(_GROUP_ORDER),
+        )
+        if group_index < previous_group_index:
+            raise ValueError(
+                f"{side_label.title()}-side position IDs must preserve the group ordering: "
+                "uncrossed single hand, uncrossed two hand, crossed single hand, crossed both hand."
+            )
+        previous_group_index = group_index
 
 
 def _sorted_column_positions(positions: list[Position]) -> list[Position]:
-    return sorted(positions, key=_column_position_sort_key)
+    return sorted(positions, key=lambda position: position.position_id)
 
 
-def _sorted_impact_positions(positions: list[Position]) -> list[Position]:
-    return sorted(
-        positions,
-        key=lambda position: (
-            _POSITION_TYPE_ORDER[position.position_type],
-            _DIRECTION_ORDER[position.lead_start_step_foot],
-            _hands_joined_sort_key(position),
-            position.label or "",
-        ),
-    )
-
-
-def _column_position_sort_key(position: Position) -> tuple[int, int, int, tuple[int, ...], str]:
-    return (
-        _GROUP_ORDER.get(
-            (position.crossed, len(position.sub_position_for_role(Role.LEAD).hands_joined)),
-            len(_GROUP_ORDER),
-        ),
-        _POSITION_TYPE_ORDER[position.position_type],
-        _single_hand_priority(position),
-        _hands_joined_sort_key(position),
-        position.label or "",
-    )
-
-
-def _single_hand_priority(position: Position) -> int:
-    follow_hands_joined = position.sub_position_for_role(Role.FOLLOW).hands_joined
-    if len(follow_hands_joined) != 1:
-        return 0
-    return 0 if follow_hands_joined[0] == Direction.RIGHT else 1
+def _sorted_accent_positions(positions: list[Position]) -> list[Position]:
+    return sorted(positions, key=lambda position: position.position_id)
 
 
 def _hands_joined_sort_key(position: Position) -> tuple[int, ...]:
@@ -233,6 +239,7 @@ def _hands_joined_sort_key(position: Position) -> tuple[int, ...]:
 # First Half Basic Positions------------------------------------------------------------------------------------------------------------------
 
 FIRST_HALF = create_position(
+    position_id=1,
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT],
@@ -299,6 +306,7 @@ FIRST_HALF = create_position(
 )
 
 FIRST_HALF_OPPOSITE = create_position(
+    position_id=2,
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.RIGHT],
@@ -330,6 +338,7 @@ FIRST_HALF_OPPOSITE = create_position(
 )
 
 FIRST_HALF_CATCH = create_position(
+    position_id=3,
     label="Catch Right Side",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
@@ -362,6 +371,7 @@ FIRST_HALF_CATCH = create_position(
 )
 
 FIRST_HALF_BOTH = create_position(
+    position_id=4,
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
@@ -443,6 +453,7 @@ FIRST_HALF_BOTH = create_position(
 )
 
 FIRST_HALF_BOTH_CUDDLE = create_position(
+    position_id=5,
     label="Cuddle",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
@@ -485,11 +496,19 @@ FIRST_HALF_BOTH_CUDDLE = create_position(
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_BOTH_CUDDLE
+        ),
+        create_move(
+            label="Double Turn Into Hammerlock",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK
         )
     ],
 )
 
 FIRST_HALF_BOTH_BACK_TO_BACK = create_position(
+    position_id=6,
     label="Back to Back Left",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
@@ -509,6 +528,7 @@ FIRST_HALF_BOTH_BACK_TO_BACK = create_position(
 )
 
 FIRST_HALF_CROSSED = create_position(
+    position_id=7,
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.RIGHT],
@@ -547,6 +567,7 @@ FIRST_HALF_CROSSED = create_position(
 )
 
 FIRST_HALF_CROSSED_OPPOSITE = create_position(
+    position_id=8,
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT],
@@ -592,6 +613,7 @@ FIRST_HALF_CROSSED_OPPOSITE = create_position(
 )
 
 FIRST_HALF_CROSSED_BOTH = create_position(
+    position_id=9,
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
@@ -645,6 +667,7 @@ FIRST_HALF_CROSSED_BOTH = create_position(
 )
 
 FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT = create_position(
+    position_id=10,
     label="Reverse Sweetheart Left",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
@@ -688,6 +711,7 @@ FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT = create_position(
 # Second Half Basic Positions------------------------------------------------------------------------------------------------------------------
 
 SECOND_HALF = create_position(
+    position_id=11,
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT],
@@ -747,6 +771,7 @@ SECOND_HALF = create_position(
 )
 
 SECOND_HALF_OPPOSITE = create_position(
+    position_id=12,
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.RIGHT],
@@ -807,6 +832,7 @@ SECOND_HALF_OPPOSITE = create_position(
 
 
 SECOND_HALF_CATCH = create_position(
+    position_id=13,
     label="Catch Left Side",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
@@ -832,6 +858,7 @@ SECOND_HALF_CATCH = create_position(
 )
 
 SECOND_HALF_BOTH = create_position(
+    position_id=14,
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
@@ -905,32 +932,8 @@ SECOND_HALF_BOTH = create_position(
     ],
 )
 
-SECOND_HALF_BOTH_TWISTED = create_position(
-    lead_start_step_foot=Direction.RIGHT,
-    follow_start_step_foot=Direction.LEFT,
-    lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
-    follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
-    crossed=False,
-    position_type=PositionType.TWISTED,
-    moves=[
-        create_move(
-            label="Hairbrush",
-            move_type=MoveType.CROSSED_ESCAPE,
-            is_lead_turn=False,
-            is_follow_turn=False,
-            dest_position=lambda: FIRST_HALF_BOTH,
-        ),
-        create_move(
-            label="Spinneroo (Step to Right)",
-            move_type=MoveType.SPICED_UP,
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_BOTH,
-        )
-    ],
-)
-
 SECOND_HALF_BOTH_HAMMERLOCK = create_position(
+    position_id=15,
     label="Hammer Lock",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
@@ -966,11 +969,19 @@ SECOND_HALF_BOTH_HAMMERLOCK = create_position(
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK
+        ),
+        create_move(
+            label="Double Turn Into Cuddle",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_BOTH_CUDDLE
         )
     ],
 )
 
 SECOND_HALF_BOTH_BACK_TO_BACK = create_position(
+    position_id=16,
     label="Back to Back Right",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
@@ -989,7 +1000,34 @@ SECOND_HALF_BOTH_BACK_TO_BACK = create_position(
     ]
 )
 
+SECOND_HALF_BOTH_TWISTED = create_position(
+    position_id=17,
+    lead_start_step_foot=Direction.RIGHT,
+    follow_start_step_foot=Direction.LEFT,
+    lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
+    follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
+    crossed=False,
+    position_type=PositionType.TWISTED,
+    moves=[
+        create_move(
+            label="Hairbrush",
+            move_type=MoveType.CROSSED_ESCAPE,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_BOTH,
+        ),
+        create_move(
+            label="Spinneroo (Step to Right)",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_BOTH,
+        )
+    ],
+)
+
 SECOND_HALF_CROSSED = create_position(
+    position_id=18,
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.RIGHT],
@@ -1051,11 +1089,19 @@ SECOND_HALF_CROSSED = create_position(
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_SHOULDER_LEAN_RIGHT
+        ),
+        create_move(
+            label="Inside Turn - Join Hands",
+            move_type=MoveType.BASIC,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_CROSSED_BOTH
         )
     ],
 )
 
 SECOND_HALF_CROSSED_OPPOSITE = create_position(
+    position_id=19,
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT],
@@ -1094,6 +1140,7 @@ SECOND_HALF_CROSSED_OPPOSITE = create_position(
 )
 
 SECOND_HALF_CROSSED_BOTH = create_position(
+    position_id=20,
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
@@ -1146,6 +1193,7 @@ SECOND_HALF_CROSSED_BOTH = create_position(
 )
 
 SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT = create_position(
+    position_id=21,
     label="Reverse Sweetheart Right",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
@@ -1186,8 +1234,9 @@ SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT = create_position(
 )
 
 
-# Impact / One-Off Positions
+# Accent Positions
 FIRST_HALF_DIP = create_position(
+    position_id=22,
     label="Basic Dip",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
@@ -1206,6 +1255,7 @@ FIRST_HALF_DIP = create_position(
 )
 
 FIRST_HALF_S_DIP = create_position(
+    position_id=23,
     label="S Dip",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
@@ -1224,6 +1274,7 @@ FIRST_HALF_S_DIP = create_position(
 )
 
 FIRST_HALF_TRUST_FALL = create_position(
+    position_id=24,
     label="Trust Fall",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
@@ -1242,6 +1293,7 @@ FIRST_HALF_TRUST_FALL = create_position(
 )
 
 FIRST_HALF_SHOULDER_LEAN_LEFT = create_position(
+    position_id=25,
     label="Shoulder Lean Left",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.LEFT,
@@ -1267,6 +1319,7 @@ FIRST_HALF_SHOULDER_LEAN_LEFT = create_position(
 )
 
 SECOND_HALF_SHOULDER_LEAN_RIGHT = create_position(
+    position_id=26,
     label="Shoulder Lean Right",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.RIGHT,
@@ -1294,4 +1347,3 @@ SECOND_HALF_SHOULDER_LEAN_RIGHT = create_position(
 
 ALL_POSITIONS: list[Position] = [definition.position for definition in _POSITION_DEFINITIONS]
 ALL_MOVES = _build_all_moves()
-_assign_position_ids()

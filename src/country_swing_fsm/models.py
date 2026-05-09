@@ -14,7 +14,7 @@ class SubPosition:
 
 @dataclass(slots=True)
 class Position:
-    position_id: str = ""
+    position_id: int
     label: str | None = None
     crossed: bool | None = None
     position_type: PositionType = PositionType.OPEN
