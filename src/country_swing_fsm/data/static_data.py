@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from country_swing_fsm.enums import Direction, PositionType, Role
+from country_swing_fsm.enums import Direction, MoveType, PositionType, Role
 from country_swing_fsm.models import Move, SubMove, OutgoingMove, Position, SubPosition
 
 
@@ -13,6 +13,7 @@ DestinationReference = Position | Callable[[], Position] | str
 @dataclass(frozen=True, slots=True)
 class MoveDefinition:
     label: str | None
+    move_type: MoveType
     is_lead_turn: bool
     is_follow_turn: bool
     destination_reference: DestinationReference
@@ -25,16 +26,28 @@ class PositionDefinition:
 
 
 _POSITION_DEFINITIONS: list[PositionDefinition] = []
+_GROUP_ORDER = {
+    (False, 1): 0,
+    (False, 2): 1,
+    (True, 1): 2,
+    (True, 2): 3,
+}
+_DIRECTION_ORDER = {
+    Direction.LEFT: 0,
+    Direction.RIGHT: 1,
+}
 
 
 def create_move(
     label: str | None,
+    move_type: MoveType,
     is_lead_turn: bool,
     is_follow_turn: bool,
     dest_position: DestinationReference,
 ) -> MoveDefinition:
     return MoveDefinition(
         label=label,
+        move_type=move_type,
         is_lead_turn=is_lead_turn,
         is_follow_turn=is_follow_turn,
         destination_reference=dest_position,
@@ -42,15 +55,20 @@ def create_move(
 
 
 def create_position(
-    label: str | None,
+    *,
+    position_id: int,
     lead_start_step_foot: Direction,
     follow_start_step_foot: Direction,
     lead_hands_joined: list[Direction],
     follow_hands_joined: list[Direction],
     position_type: PositionType,
     moves: list[MoveDefinition],
+    label: str | None = None,
     crossed: bool | None = None,
 ) -> Position:
+    if not isinstance(position_id, int):
+        raise TypeError("position_id must be an int.")
+
     hand_count = len(lead_hands_joined)
     if hand_count != len(follow_hands_joined):
         raise ValueError("Lead and follow must have the same number of joined hands.")
@@ -61,10 +79,17 @@ def create_position(
                 "crossed must not be supplied for single-hand positions; it is derived."
             )
         crossed = lead_hands_joined[0] == follow_hands_joined[0]
+    elif hand_count == 0:
+        if crossed is not None:
+            raise ValueError(
+                "crossed must not be supplied for no-hand positions; it is undefined."
+            )
+        crossed = None
     elif crossed is None:
         raise ValueError("crossed must be supplied for positions with other than one hand.")
 
     position = Position(
+        position_id=position_id,
         label=label,
         crossed=crossed,
         position_type=position_type,
@@ -101,6 +126,7 @@ def _resolve_destination(destination_reference: DestinationReference) -> Positio
 
 
 def _build_all_moves() -> list[Move]:
+    _validate_position_ids()
     all_moves: list[Move] = []
 
     for position_definition in _POSITION_DEFINITIONS:
@@ -112,6 +138,7 @@ def _build_all_moves() -> list[Move]:
                 label=move_definition.label,
                 source=position_definition.position,
                 destination=destination,
+                move_type=move_definition.move_type,
                 sub_moves=[
                     SubMove(role=Role.LEAD, is_turn=move_definition.is_lead_turn),
                     SubMove(role=Role.FOLLOW, is_turn=move_definition.is_follow_turn),
@@ -128,56 +155,149 @@ def _build_all_moves() -> list[Move]:
     return all_moves
 
 
+def _validate_position_ids() -> None:
+    position_ids = [position.position_id for position in ALL_POSITIONS]
+    if len(set(position_ids)) != len(position_ids):
+        raise ValueError("Position IDs must be unique.")
+
+    left_positions = _sorted_column_positions(
+        [
+            position
+            for position in ALL_POSITIONS
+            if (
+                position.position_type != PositionType.ACCENT
+                and position.lead_start_step_foot == Direction.LEFT
+            )
+        ]
+    )
+    right_positions = _sorted_column_positions(
+        [
+            position
+            for position in ALL_POSITIONS
+            if (
+                position.position_type != PositionType.ACCENT
+                and position.lead_start_step_foot == Direction.RIGHT
+            )
+        ]
+    )
+    accent_positions = _sorted_accent_positions(
+        [position for position in ALL_POSITIONS if position.position_type == PositionType.ACCENT]
+    )
+
+    _validate_side_position_ids("left", left_positions)
+    _validate_side_position_ids("right", right_positions)
+
+    if left_positions and right_positions and max(position.position_id for position in left_positions) >= min(
+        position.position_id for position in right_positions
+    ):
+        raise ValueError("All left-side position IDs must be less than all right-side position IDs.")
+
+    if right_positions and accent_positions and max(position.position_id for position in right_positions) >= min(
+        position.position_id for position in accent_positions
+    ):
+        raise ValueError("All right-side position IDs must be less than all accent position IDs.")
+
+
+def _validate_side_position_ids(side_label: str, positions: list[Position]) -> None:
+    sorted_by_id = sorted(positions, key=lambda position: position.position_id)
+    previous_group_index = -1
+    previous_position_id = None
+    for position in sorted_by_id:
+        if previous_position_id is not None and position.position_id <= previous_position_id:
+            raise ValueError(f"{side_label.title()}-side position IDs must be strictly increasing.")
+        previous_position_id = position.position_id
+
+        group_index = _GROUP_ORDER.get(
+            (position.crossed, len(position.sub_position_for_role(Role.LEAD).hands_joined)),
+            len(_GROUP_ORDER),
+        )
+        if group_index < previous_group_index:
+            raise ValueError(
+                f"{side_label.title()}-side position IDs must preserve the group ordering: "
+                "uncrossed single hand, uncrossed two hand, crossed single hand, crossed both hand."
+            )
+        previous_group_index = group_index
+
+
+def _sorted_column_positions(positions: list[Position]) -> list[Position]:
+    return sorted(positions, key=lambda position: position.position_id)
+
+
+def _sorted_accent_positions(positions: list[Position]) -> list[Position]:
+    return sorted(positions, key=lambda position: position.position_id)
+
+
+def _hands_joined_sort_key(position: Position) -> tuple[int, ...]:
+    return tuple(
+        _DIRECTION_ORDER[direction]
+        for direction in position.sub_position_for_role(Role.LEAD).hands_joined
+    )
+
+
 # TODO Add all Moves that point back to own state
 
 # First Half Basic Positions------------------------------------------------------------------------------------------------------------------
 
 FIRST_HALF = create_position(
-    label="First Half Uncrossed Left Hand",
+    position_id=1,
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.RIGHT],
-    position_type=PositionType.NORMAL,
+    position_type=PositionType.OPEN,
     moves=[
         create_move(
             label="Behind the Back Pass",
+            move_type=MoveType.BASIC,
             is_lead_turn=True,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF,
         ),
         create_move(
             label="Arch",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=True,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF,
         ),
         create_move(
             label="Pancake Outside Turn(s)",
+            move_type=MoveType.BASIC,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF,
         ),
         create_move(
             label="Push Off Outside Turn",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF,
         ),
         create_move(
-            label="Offer Right Hand Outside Turn(s)",
+            label="Offer Hand + Drop",
+            move_type=MoveType.OFFER_OR_DROP,
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: SECOND_HALF_OPPOSITE,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_OPPOSITE,
+        ),
+        create_move(
+            label="Offer Hand + Hold",
+            move_type=MoveType.OFFER_OR_DROP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_BOTH,
         ),
         create_move(
             label="Rainbow Outside Turn(s)",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_CROSSED,
         ),
         create_move(
             label="Behind the Back Pass - Switch Hands",
+            move_type=MoveType.BASIC,
             is_lead_turn=True,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_CROSSED,
@@ -186,30 +306,40 @@ FIRST_HALF = create_position(
 )
 
 FIRST_HALF_OPPOSITE = create_position(
-    label="First Half Uncrossed Right Hand",
+    position_id=2,
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.LEFT],
-    position_type=PositionType.NORMAL,
+    position_type=PositionType.OPEN,
     moves=[
         create_move(
-            label="Offer Left Hand Outside Turn(s)",
+            label="Offer Hand + Drop",
+            move_type=MoveType.OFFER_OR_DROP,
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: SECOND_HALF,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF,
+        ),
+        create_move(
+            label="Offer Hand + Hold",
+            move_type=MoveType.OFFER_OR_DROP,
+            is_lead_turn = False,
+            is_follow_turn = False,
+            dest_position=lambda: FIRST_HALF_BOTH
         ),
         create_move(
             label="Inside Turn(s)",
-            is_lead_turn=True,
-            is_follow_turn=False,
+            move_type=MoveType.BASIC,
+            is_lead_turn=False,
+            is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_OPPOSITE,
         )
     ],
 )
 
 FIRST_HALF_CATCH = create_position(
-    label="First Half Catch",
+    position_id=3,
+    label="Catch Right Side",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT],
@@ -217,64 +347,114 @@ FIRST_HALF_CATCH = create_position(
     position_type=PositionType.TWISTED,
     moves=[
         create_move(
-            label="Push Into Reset",
+            label="Pull Into Reset",
+            move_type=MoveType.BASIC,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF,
         ),
         create_move(
             label="Fishtail",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_CATCH,
+        ),
+        create_move(
+            label="Pull Into Duck Turn",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=-True,
+            dest_position=lambda: SECOND_HALF_OPPOSITE
         )
     ],
 )
 
 FIRST_HALF_BOTH = create_position(
-    label="First Half Uncrossed 2 Hands",
+    position_id=4,
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
     crossed=False,
-    position_type=PositionType.NORMAL,
+    position_type=PositionType.OPEN,
     moves=[
         create_move(
             label="Behind the Back Pass (Infinity)",
+            move_type=MoveType.BASIC,
             is_lead_turn=True,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_BOTH,
         ),
         create_move(
             label="Spinneroo (Step to Left)",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_BOTH_TWISTED,
         ),
         create_move(
             label="Outside Turn (Hammerlock)",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK,
         ),
         create_move(
             label="Arm Slide",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_CROSSED,
         ),
         create_move(
             label="Opposite Hand Arm Slide",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE,
+        ),
+        create_move(
+            label="Drop Right Hand",
+            move_type=MoveType.OFFER_OR_DROP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF
+        ),
+        create_move(
+            label="Drop Left Hand",
+            move_type=MoveType.OFFER_OR_DROP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_OPPOSITE
+        ),
+        create_move(
+            label="Basic Check Left",
+            move_type=MoveType.BASIC,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_BOTH
+        ),
+        create_move(
+            label="Pretzel First Half (lead under left, turn follow with left)",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_BOTH_BACK_TO_BACK
+        ),
+        create_move(
+            label="Full Pretzel",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_BOTH
         )
     ],
 )
 
 FIRST_HALF_BOTH_CUDDLE = create_position(
-    label="First Half Cuddle",
+    position_id=5,
+    label="Cuddle",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
@@ -284,168 +464,305 @@ FIRST_HALF_BOTH_CUDDLE = create_position(
     moves=[
         create_move(
             label="Trust Fall",
+            move_type=MoveType.ACCENT,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_TRUST_FALL,
         ),
         create_move(
             label="Stretch",
+            move_type=MoveType.BASIC,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_OPPOSITE,
         ),
         create_move(
             label="Unwind",
+            move_type=MoveType.BASIC,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_BOTH,
+        ),
+        create_move(
+            label="Cuddle Lean",
+            move_type=MoveType.ACCENT,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_BOTH_CUDDLE
+        ),
+        create_move(
+            label="Rotate",
+            move_type=MoveType.ROTATE,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_BOTH_CUDDLE
+        ),
+        create_move(
+            label="Double Turn Into Hammerlock",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK
         )
     ],
 )
 
+FIRST_HALF_BOTH_BACK_TO_BACK = create_position(
+    position_id=6,
+    label="Back to Back Left",
+    lead_start_step_foot=Direction.LEFT,
+    follow_start_step_foot=Direction.RIGHT,
+    lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
+    follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
+    position_type=PositionType.TWISTED,
+    crossed=False,
+    moves=[
+        create_move(
+            label="Pretzel Second Half (follow under right, lead turns under left)",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_BOTH
+        )
+    ]
+)
+
 FIRST_HALF_CROSSED = create_position(
-    label="First Half Crossed Right Hand",
+    position_id=7,
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT],
-    position_type=PositionType.NORMAL,
+    position_type=PositionType.OPEN,
     moves=[
         create_move(
             label="Behind the Back Pass",
+            move_type=MoveType.BASIC,
             is_lead_turn=True,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF,
         ),
         create_move(
             label="Behind the Back Pass - Keep Hands Switched",
+            move_type=MoveType.BASIC,
             is_lead_turn=True,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_CROSSED,
         ),
         create_move(
-            label="Lasso Into Outside Turn",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE,
+            label="Reverse Sweetheart Left",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT
         ),
         create_move(
-            label="Lasso Into Shoulder Lean", # TODO ensure that FIRST_HALF_CROSSED_OPPOSITE can also go into SECOND_HALF_SHOULDER_LEAN
+            label="Offer Hand + Drop",
+            move_type=MoveType.OFFER_OR_DROP,
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: SECOND_HALF_SHOULDER_LEAN,
-        ),
-        create_move(
-            label="Offer Left Hand Outside Turn",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: SECOND_HALF_BOTH,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE,
         )
     ],
 )
 
 FIRST_HALF_CROSSED_OPPOSITE = create_position(
-    label="First Half Crossed Left Hand",
+    position_id=8,
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.LEFT],
-    position_type=PositionType.NORMAL,
+    position_type=PositionType.OPEN,
     moves=[
         create_move(
             label="Hairbrush",
+            move_type=MoveType.CROSSED_ESCAPE,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF,
         ),
         create_move(
-            label="Offer Right Hand Outside Turn(s)",
+            label="Offer Hand + Drop",
+            move_type=MoveType.OFFER_OR_DROP,
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: SECOND_HALF_CROSSED,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED,
+        ),
+        create_move(
+            label="Offer Hand + Hold",
+            move_type=MoveType.OFFER_OR_DROP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
         ),
         create_move(
             label="Inside Turn(s)",
+            move_type=MoveType.BASIC,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE,
+        ),
+        create_move(
+            label="Shoulder Lean",
+            move_type=MoveType.ACCENT,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_SHOULDER_LEAN_LEFT
         )
     ],
 )
 
-FIRST_HALF_CROSSED_BOTH = create_position( # TODO ensure an S Dip can happen from SECOND_HALF_CROSSED_BOTH
-    label="First Half Crossed 2 Hands",
+FIRST_HALF_CROSSED_BOTH = create_position(
+    position_id=9,
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
     crossed=True,
-    position_type=PositionType.NORMAL,
+    position_type=PositionType.OPEN,
     moves=[
         create_move(
             label="Hairbrush",
+            move_type=MoveType.CROSSED_ESCAPE,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_BOTH,
         ),
         create_move(
             label="Sunrise",
+            move_type=MoveType.CROSSED_ESCAPE,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_BOTH,
         ),
         create_move(
             label="Spinneroo (Step to Left)",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: SECOND_HALF_CROSSED_BOTH,
+        ),
+        create_move(
+            label="Duck Under Spinneroo (Turn to Left)",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED_BOTH,
+        ),
+        create_move(
+            label="Drop Left Hand",
+            move_type=MoveType.OFFER_OR_DROP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED
+        ),
+        create_move(
+            label="Drop Right Hand",
+            move_type=MoveType.OFFER_OR_DROP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE
         )
     ],
+)
+
+FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT = create_position(
+    position_id=10,
+    label="Reverse Sweetheart Left",
+    lead_start_step_foot=Direction.LEFT,
+    follow_start_step_foot=Direction.RIGHT,
+    lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
+    follow_hands_joined=[Direction.LEFT, Direction.RIGHT],
+    position_type=PositionType.TWISTED,
+    crossed=True,
+    moves=[
+        create_move(
+            label="Rotate",
+            move_type=MoveType.ROTATE,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT
+        ),
+        create_move(
+            label="Drop Right Hand and Lasso",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda:SECOND_HALF_CROSSED_OPPOSITE
+        ),
+        create_move(
+            label="Drop Right Hand + Lasso Into Shoulder Lean Left",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_SHOULDER_LEAN_LEFT
+        ),
+        create_move(
+            label="Pull to Right",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT
+        )
+    ]
 )
 
 
 # Second Half Basic Positions------------------------------------------------------------------------------------------------------------------
 
 SECOND_HALF = create_position(
-    label="Second Half Uncrossed Left Hand",
+    position_id=11,
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.RIGHT],
-    position_type=PositionType.NORMAL,
+    position_type=PositionType.OPEN,
     moves=[
         create_move(
             label="Inside Turn(s)",
+            move_type=MoveType.BASIC,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF,
         ),
         create_move(
             label="Inside Turn(s) Into Dip",
+            move_type=MoveType.ACCENT,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_DIP,
         ),
         create_move(
             label="Right Shoulder Duck",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF,
         ),
         create_move(
             label="Stop at Left Shoulder",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_CATCH,
         ),
         create_move(
-            label="Offer Right Hand Outside Turn(s)",
+            label="Offer Right Hand + Drop",
+            move_type=MoveType.OFFER_OR_DROP,
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_OPPOSITE,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_OPPOSITE,
+        ),
+        create_move(
+            label="Offer Hand + Hold",
+            move_type=MoveType.OFFER_OR_DROP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_BOTH
         ),
         create_move(
             label="Inside Turn(s) - Join Hands",
+            move_type=MoveType.BASIC,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_BOTH,
@@ -454,43 +771,69 @@ SECOND_HALF = create_position(
 )
 
 SECOND_HALF_OPPOSITE = create_position(
-    label="Second Half Uncrossed Right Hand",
+    position_id=12,
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.LEFT],
-    position_type=PositionType.NORMAL,
+    position_type=PositionType.OPEN,
     moves=[
         create_move(
-            label="Offer Left Hand Inside Turn(s)",
+            label="Offer Hand + Drop",
+            move_type=MoveType.OFFER_OR_DROP,
             is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF,
+        ),
+        create_move(
+            label="Offer Hand + Hold",
+            move_type=MoveType.OFFER_OR_DROP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_BOTH,
         ),
         create_move(
             label="J Hook Reset",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF,
         ),
         create_move(
             label="J Hook Into Dip",
+            move_type=MoveType.ACCENT,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_DIP,
         ),
         create_move(
             label="Outside Turn(s)",
+            move_type=MoveType.BASIC,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_OPPOSITE,
+        ),
+        create_move(
+            label="J Hook Into Cuddle",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_BOTH_CUDDLE
+        ),
+        create_move(
+            label="Lead Hair Flip",
+            move_type=MoveType.ACCENT,
+            is_lead_turn=True,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_OPPOSITE
         )
     ],
 )
 
 
 SECOND_HALF_CATCH = create_position(
-    label="Second Half Catch",
+    position_id=13,
+    label="Catch Left Side",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT],
@@ -499,12 +842,14 @@ SECOND_HALF_CATCH = create_position(
     moves=[
         create_move(
             label="Fishtail",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_CATCH
         ),
         create_move(
-            label="Push Into Reset",
+            label="Pull Into Reset",
+            move_type=MoveType.BASIC,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF
@@ -513,67 +858,83 @@ SECOND_HALF_CATCH = create_position(
 )
 
 SECOND_HALF_BOTH = create_position(
-    label="Second Half Uncrossed 2 Hands",
+    position_id=14,
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
     crossed=False,
-    position_type=PositionType.NORMAL,
+    position_type=PositionType.OPEN,
     moves=[
         create_move(
             label="Inside Turn(s) (Infinity)",
+            move_type=MoveType.BASIC,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_BOTH,
         ),
         create_move(
-            label="Inside Turn - Keep Right Hand",
+            label="Inside Turn Into Cuddle",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=True,
             dest_position=lambda: FIRST_HALF_BOTH_CUDDLE,
         ),
         create_move(
             label="Arm Slide",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_CROSSED,
         ),
         create_move(
             label="Opposite Hand Arm Slide",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE,
-        )
-    ],
-)
-
-SECOND_HALF_BOTH_TWISTED = create_position(
-    label="Second Half Uncrossed 2 Hands Twisted",
-    lead_start_step_foot=Direction.RIGHT,
-    follow_start_step_foot=Direction.LEFT,
-    lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
-    follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
-    crossed=False,
-    position_type=PositionType.TWISTED,
-    moves=[
-        create_move(
-            label="Hairbrush",
-            is_lead_turn=False,
-            is_follow_turn=False,
-            dest_position=lambda: FIRST_HALF_BOTH,
         ),
         create_move(
-            label="Spinneroo (Step to Right)",
+            label="Drop Right Hand",
+            move_type=MoveType.OFFER_OR_DROP,
             is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF
+        ),
+        create_move(
+            label="Drop Left Hand",
+            move_type=MoveType.OFFER_OR_DROP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_OPPOSITE
+        ),
+        create_move(
+            label="Basic Check Right",
+            move_type=MoveType.BASIC,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_BOTH
+        ),
+        create_move(
+            label="Pretzel First Half (lead under right, turn follow with right)",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
             is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_BOTH,
+            dest_position=lambda: SECOND_HALF_BOTH_BACK_TO_BACK
+        ),
+        create_move(
+            label="Full Pretzel",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_BOTH
         )
     ],
 )
 
 SECOND_HALF_BOTH_HAMMERLOCK = create_position(
-    label="Second Half Hammerlock",
+    position_id=15,
+    label="Hammer Lock",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
@@ -583,167 +944,328 @@ SECOND_HALF_BOTH_HAMMERLOCK = create_position(
     moves=[
         create_move(
             label="Hair Flip",
+            move_type=MoveType.ACCENT,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_OPPOSITE,
+        ),
+        create_move(
+            label="Unwind",
+            move_type=MoveType.BASIC,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_BOTH
+        ),
+        create_move(
+            label="Duck Under Rotate",
+            move_type=MoveType.ROTATE,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK
+        ),
+        create_move(
+            label="Duck Under Peek",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_BOTH_HAMMERLOCK
+        ),
+        create_move(
+            label="Double Turn Into Cuddle",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_BOTH_CUDDLE
         )
     ],
 )
 
-SECOND_HALF_CROSSED = create_position(
-    label="Second Half Crossed Right Hand",
-    lead_start_step_foot=Direction.RIGHT,
-    follow_start_step_foot=Direction.LEFT,
-    lead_hands_joined=[Direction.RIGHT],
-    follow_hands_joined=[Direction.RIGHT],
-    position_type=PositionType.NORMAL,
-    moves=[
-        create_move(
-            label="Inside Turn(s) - Put Hand in Left",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF,
-        ),
-        create_move(
-            label="J Hook Reset",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF,
-        ),
-        create_move(
-            label="J Hook Into Dip",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_DIP,
-        ),
-        create_move(
-            label="Inside Turn(s)",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_CROSSED,
-        ),
-        create_move(
-            label="Offer Left Hand Inside Turn(s)",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE,
-        )
-    ],
-)
-
-# TODO WHAT MATTERS FOR INSIDE VS OUTSIDE TURN: 
-# If the hand being held during the turn is the same hand as the direction turning, then outside. 
-# If hand being held is the opposite from direction turning, then inside
-# TODO add inside vs. outside turn calculated properties for SubMove, but to the Move, add an optional "offered_hand" property that supersedes hand of source state
-# If no offered_hand, then use hand of source state. If both hands joined on source state, ...?
-
-SECOND_HALF_CROSSED_OPPOSITE = create_position(
-    label="Second Half Crossed Left Hand",
-    lead_start_step_foot=Direction.RIGHT,
-    follow_start_step_foot=Direction.LEFT,
-    lead_hands_joined=[Direction.LEFT],
-    follow_hands_joined=[Direction.LEFT],
-    position_type=PositionType.NORMAL,
-    moves=[
-        create_move(
-            label="Hairbrush",
-            is_lead_turn=False,
-            is_follow_turn=False,
-            dest_position=lambda: FIRST_HALF,
-        ),
-        create_move(
-            label="Offer Left Hand Inside Turn - Keep Right Hand",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
-        ),
-        create_move(
-            label="Inside Turn - Join Hands",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
-        ),
-        create_move(
-            label="Offer Right Hand Outside Turn(s)",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_CROSSED,
-        ),
-        create_move(
-            label="Inside Turn(s)",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE,
-        )
-    ],
-)
-
-SECOND_HALF_CROSSED_BOTH = create_position(
-    label="Second Half Crossed 2 Hands",
+SECOND_HALF_BOTH_BACK_TO_BACK = create_position(
+    position_id=16,
+    label="Back to Back Right",
     lead_start_step_foot=Direction.RIGHT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
-    crossed=True,
-    position_type=PositionType.NORMAL,
+    position_type=PositionType.TWISTED,
+    crossed=False,
+    moves=[
+        create_move(
+            label="Pretzel Second Half (follow under left, lead turns under right)",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_BOTH
+        )
+    ]
+)
+
+SECOND_HALF_BOTH_TWISTED = create_position(
+    position_id=17,
+    lead_start_step_foot=Direction.RIGHT,
+    follow_start_step_foot=Direction.LEFT,
+    lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
+    follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
+    crossed=False,
+    position_type=PositionType.TWISTED,
     moves=[
         create_move(
             label="Hairbrush",
-            is_lead_turn=False,
-            is_follow_turn=False,
-            dest_position=lambda: FIRST_HALF_BOTH,
-        ),
-        create_move(
-            label="Sunrise",
+            move_type=MoveType.CROSSED_ESCAPE,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF_BOTH,
         ),
         create_move(
             label="Spinneroo (Step to Right)",
+            move_type=MoveType.SPICED_UP,
             is_lead_turn=False,
             is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
-        ),
-        create_move(
-            label="S Dip",
-            is_lead_turn=False,
-            is_follow_turn=True,
-            dest_position=lambda: FIRST_HALF_S_DIP
+            dest_position=lambda: FIRST_HALF_BOTH,
         )
     ],
 )
 
+SECOND_HALF_CROSSED = create_position(
+    position_id=18,
+    lead_start_step_foot=Direction.RIGHT,
+    follow_start_step_foot=Direction.LEFT,
+    lead_hands_joined=[Direction.RIGHT],
+    follow_hands_joined=[Direction.RIGHT],
+    position_type=PositionType.OPEN,
+    moves=[
+        create_move(
+            label="Inside Turn(s) - Put Hand in Left",
+            move_type=MoveType.CROSSED_ESCAPE,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF,
+        ),
+        create_move(
+            label="J Hook Reset",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF,
+        ),
+        create_move(
+            label="J Hook Into Dip",
+            move_type=MoveType.ACCENT,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_DIP,
+        ),
+        create_move(
+            label="Inside Turn(s)",
+            move_type=MoveType.BASIC,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_CROSSED,
+        ),
+        create_move(
+            label="Offer Hand + Drop",
+            move_type=MoveType.OFFER_OR_DROP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE,
+        ),
+        create_move(
+            label="Offer Hand + Hold",
+            move_type=MoveType.OFFER_OR_DROP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED_BOTH,
+        ),
+        create_move(
+            label="S Dip",
+            move_type=MoveType.ACCENT,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_S_DIP
+        ),
+        create_move(
+            label="Shoulder Lean",
+            move_type=MoveType.ACCENT,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_SHOULDER_LEAN_RIGHT
+        ),
+        create_move(
+            label="Inside Turn - Join Hands",
+            move_type=MoveType.BASIC,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_CROSSED_BOTH
+        )
+    ],
+)
 
-# Impact / One-Off Positions
+SECOND_HALF_CROSSED_OPPOSITE = create_position(
+    position_id=19,
+    lead_start_step_foot=Direction.RIGHT,
+    follow_start_step_foot=Direction.LEFT,
+    lead_hands_joined=[Direction.LEFT],
+    follow_hands_joined=[Direction.LEFT],
+    position_type=PositionType.OPEN,
+    moves=[
+        create_move(
+            label="Hairbrush",
+            move_type=MoveType.CROSSED_ESCAPE,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF,
+        ),
+        create_move(
+            label="Offer Right Hand + Drop",
+            move_type=MoveType.OFFER_OR_DROP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED,
+        ),
+        create_move(
+            label="Inside Turn(s)",
+            move_type=MoveType.BASIC,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_CROSSED_OPPOSITE,
+        ),
+        create_move(
+            label="Reverse Sweetheart Right",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT
+        )
+    ],
+)
+
+SECOND_HALF_CROSSED_BOTH = create_position(
+    position_id=20,
+    lead_start_step_foot=Direction.RIGHT,
+    follow_start_step_foot=Direction.LEFT,
+    lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
+    follow_hands_joined=[Direction.RIGHT, Direction.LEFT],
+    crossed=True,
+    position_type=PositionType.OPEN,
+    moves=[
+        create_move(
+            label="Hairbrush",
+            move_type=MoveType.CROSSED_ESCAPE,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_BOTH,
+        ),
+        create_move(
+            label="Sunrise",
+            move_type=MoveType.CROSSED_ESCAPE,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_BOTH,
+        ),
+        create_move(
+            label="Spinneroo (Step to Right)",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
+        ),create_move(
+            label="Duck Under Spinneroo (Turn to Right)",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=True,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED_BOTH,
+        ),
+        create_move(
+            label="Drop Left Hand",
+            move_type=MoveType.OFFER_OR_DROP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED
+        ),
+        create_move(
+            label="Drop Right Hand",
+            move_type=MoveType.OFFER_OR_DROP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE
+        )
+    ],
+)
+
+SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT = create_position(
+    position_id=21,
+    label="Reverse Sweetheart Right",
+    lead_start_step_foot=Direction.RIGHT,
+    follow_start_step_foot=Direction.LEFT,
+    lead_hands_joined=[Direction.LEFT, Direction.RIGHT],
+    follow_hands_joined=[Direction.LEFT, Direction.RIGHT],
+    position_type=PositionType.TWISTED,
+    crossed=True,
+    moves=[
+        create_move(
+            label="Rotate",
+            move_type=MoveType.ROTATE,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: SECOND_HALF_CROSSED_REVERSE_SWEETHEART_RIGHT
+        ),
+        create_move(
+            label="Drop Left Hand and Lasso",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda:FIRST_HALF_CROSSED
+        ),
+        create_move(
+            label="Lasso Into Shoulder Lean Right",
+            move_type=MoveType.ACCENT,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_SHOULDER_LEAN_RIGHT
+        ),
+        create_move(
+            label="Pull to Left",
+            move_type=MoveType.SPICED_UP,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF_CROSSED_REVERSE_SWEETHEART_LEFT
+        )
+    ]
+)
+
+
+# Accent Positions
 FIRST_HALF_DIP = create_position(
-    label="Entering Left Dip",
+    position_id=22,
+    label="Basic Dip",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[],
     follow_hands_joined=[],
-    crossed=False,
-    position_type=PositionType.IMPACT,
+    position_type=PositionType.ACCENT,
     moves=[
         create_move(
             label="Dip and Reset",
+            move_type=MoveType.ACCENT,
             is_lead_turn=False,
             is_follow_turn=False,
-            dest_position=lambda: FIRST_HALF,
+            dest_position=lambda: SECOND_HALF,
         )
     ],
 )
 
 FIRST_HALF_S_DIP = create_position(
-    label="Entering Left S Dip",
+    position_id=23,
+    label="S Dip",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[Direction.RIGHT],
     follow_hands_joined=[Direction.RIGHT],
-    position_type=PositionType.IMPACT,
+    position_type=PositionType.ACCENT,
     moves=[
         create_move(
             label="Dip and Reset",
+            move_type=MoveType.ACCENT,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: SECOND_HALF_CROSSED,
@@ -752,16 +1274,17 @@ FIRST_HALF_S_DIP = create_position(
 )
 
 FIRST_HALF_TRUST_FALL = create_position(
-    label="Entering Trust Fall",
+    position_id=24,
+    label="Trust Fall",
     lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.RIGHT,
     lead_hands_joined=[],
     follow_hands_joined=[],
-    crossed=False,
-    position_type=PositionType.IMPACT,
+    position_type=PositionType.ACCENT,
     moves=[
         create_move(
             label="Trust Fall and Reset",
+            move_type=MoveType.ACCENT,
             is_lead_turn=False,
             is_follow_turn=False,
             dest_position=lambda: FIRST_HALF,
@@ -769,21 +1292,55 @@ FIRST_HALF_TRUST_FALL = create_position(
     ],
 )
 
-SECOND_HALF_SHOULDER_LEAN = create_position(
-    label="Second Half Shoulder Lean",
-    lead_start_step_foot=Direction.RIGHT,
+FIRST_HALF_SHOULDER_LEAN_LEFT = create_position(
+    position_id=25,
+    label="Shoulder Lean Left",
+    lead_start_step_foot=Direction.LEFT,
     follow_start_step_foot=Direction.LEFT,
     lead_hands_joined=[Direction.LEFT],
     follow_hands_joined=[Direction.LEFT],
-    position_type=PositionType.IMPACT,
+    position_type=PositionType.ACCENT,
     moves=[
         create_move(
-            label="Arm Slide",
+            label="Lean and Arm Slide",
+            move_type=MoveType.ACCENT,
             is_lead_turn=False,
             is_follow_turn=False,
-            dest_position=lambda: FIRST_HALF_OPPOSITE,
+            dest_position=lambda: SECOND_HALF_OPPOSITE,
         ),
-        # TODO consider a move that uses connected lead left/follow left
+        create_move(
+            label="Lean and Turn with Shoulder Hand",
+            move_type=MoveType.ACCENT,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: SECOND_HALF_CROSSED_OPPOSITE
+        )
+    ],
+)
+
+SECOND_HALF_SHOULDER_LEAN_RIGHT = create_position(
+    position_id=26,
+    label="Shoulder Lean Right",
+    lead_start_step_foot=Direction.RIGHT,
+    follow_start_step_foot=Direction.RIGHT,
+    lead_hands_joined=[Direction.RIGHT],
+    follow_hands_joined=[Direction.RIGHT],
+    position_type=PositionType.ACCENT,
+    moves=[
+        create_move(
+            label="Lean and Arm Slide",
+            move_type=MoveType.ACCENT,
+            is_lead_turn=False,
+            is_follow_turn=False,
+            dest_position=lambda: FIRST_HALF,
+        ),
+        create_move(
+            label="Lean and Turn with Shoulder Hand",
+            move_type=MoveType.ACCENT,
+            is_lead_turn=False,
+            is_follow_turn=True,
+            dest_position=lambda: FIRST_HALF_CROSSED
+        )
     ],
 )
 
