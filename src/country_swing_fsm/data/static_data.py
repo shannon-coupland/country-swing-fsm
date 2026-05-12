@@ -1387,6 +1387,13 @@ FIRST_HALF_DIP = create_position(
             follow_turn_direction=None,
             dest_position=lambda: SECOND_HALF_OPPOSITE,
         ),
+        create_move(
+            label="Dip and Ronde",
+            move_type=MoveType.SPICY,
+            lead_turn_direction=None,
+            follow_turn_direction=Direction.RIGHT,
+            dest_position=lambda: FIRST_HALF_DIP
+        )
     ],
 )
 

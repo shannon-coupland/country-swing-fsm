@@ -10,8 +10,16 @@ __pycache__/
 # Distribution / packaging
 build/
 dist/
+build_*/
+dist_*/
 *.egg-info/
 *.egg
+
+# Windows executable / PyInstaller artifacts
+*.exe
+*.manifest
+*.pkg
+*.spec
 
 # dotenv environment variable files
 .env
